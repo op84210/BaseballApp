@@ -1,0 +1,137 @@
+@model IEnumerable<BaseballApp.Models.BattingStats>
+
+@{
+    ViewData["Title"] = "棒球打擊成績";
+}
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2 class="mb-3">棒球打擊成績查詢</h2>
+
+            <!-- 搜尋表單 -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <form method="get" class="row g-3">
+                        <div class="col-md-8">
+                            <label for="playerName" class="form-label">球員姓名</label>
+                            <input type="text" class="form-control" id="playerName" name="playerName"
+                                   value="@ViewBag.PlayerName" placeholder="輸入球員姓名...">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">&nbsp;</label>
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-search"></i> 查詢
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- 更新數據按鈕 -->
+            <div class="mb-3">
+                <form method="post" asp-action="UpdateStats" class="d-inline">
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-sync-alt"></i> 更新數據
+                    </button>
+                </form>
+                <a href="@Url.Action("Charts", "Home")" class="btn btn-info ms-2">
+                    <i class="fas fa-chart-bar"></i> 查看圖表
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- 錯誤訊息 -->
+    @if (!string.IsNullOrEmpty(ViewBag.ErrorMessage))
+    {
+        <div class="alert alert-danger" role="alert">
+            @ViewBag.ErrorMessage
+        </div>
+    }
+
+    <!-- 成功訊息 -->
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success" role="alert">
+            @TempData["SuccessMessage"]
+        </div>
+    }
+
+    <!-- 數據表格 -->
+    @if (Model.Any())
+    {
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">打擊成績列表</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>球員</th>
+                                <th>球隊</th>
+                                <th>賽季</th>
+                                <th>打席</th>
+                                <th>打數</th>
+                                <th>安打</th>
+                                <th>打擊率</th>
+                                <th>全壘打</th>
+                                <th>打點</th>
+                                <th>得分</th>
+                                <th>盜壘</th>
+                                <th>四壞</th>
+                                <th>三振</th>
+                                <th>OPS</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var stat in Model)
+                            {
+                                <tr>
+                                    <td><strong>@stat.PlayerName</strong></td>
+                                    <td>@stat.Team</td>
+                                    <td>@stat.Season</td>
+                                    <td>@stat.PlateAppearances</td>
+                                    <td>@stat.AtBats</td>
+                                    <td>@stat.Hits</td>
+                                    <td>@stat.BattingAverage.ToString("F3")</td>
+                                    <td>@stat.HomeRuns</td>
+                                    <td>@stat.RBIs</td>
+                                    <td>@stat.Runs</td>
+                                    <td>@stat.StolenBases</td>
+                                    <td>@stat.Walks</td>
+                                    <td>@stat.Strikeouts</td>
+                                    <td>@stat.OPS.ToString("F3")</td>
+                                    <td>
+                                        <a href="@Url.Action("PlayerStats", new { playerName = stat.PlayerName, season = stat.Season })"
+                                           class="btn btn-sm btn-outline-primary">
+                                            詳細
+                                        </a>
+                                        <a href="@Url.Action("MonthlyStats", new { playerName = stat.PlayerName, season = stat.Season })"
+                                           class="btn btn-sm btn-outline-info ms-1">
+                                            月度
+                                        </a>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="card">
+            <div class="card-body text-center">
+                <h5 class="text-muted">沒有找到相關數據</h5>
+                <p class="text-muted">請檢查球員姓名拼寫或嘗試其他搜尋條件</p>
+            </div>
+        </div>
+    }
+</div>

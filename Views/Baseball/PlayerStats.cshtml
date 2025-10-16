@@ -1,0 +1,191 @@
+@model BaseballApp.Models.BattingStats
+
+@{
+    ViewData["Title"] = $"{Model.PlayerName} - 打擊成績";
+}
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="@Url.Action("Stats", "Baseball")">打擊成績</a></li>
+                    <li class="breadcrumb-item active">@Model.PlayerName</li>
+                </ol>
+            </nav>
+
+            <h2>@Model.PlayerName 打擊成績</h2>
+            <p class="text-muted">@Model.Team | @Model.Season 賽季</p>
+        </div>
+    </div>
+
+    <!-- 錯誤訊息 -->
+    @if (!string.IsNullOrEmpty(ViewBag.ErrorMessage))
+    {
+        <div class="alert alert-danger" role="alert">
+            @ViewBag.ErrorMessage
+        </div>
+    }
+
+    <div class="row">
+        <!-- 基本數據卡片 -->
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">基本打擊數據</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-6">
+                            <div class="mb-3">
+                                <label class="form-label text-muted">打席數</label>
+                                <h4 class="text-primary">@Model.PlateAppearances</h4>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="mb-3">
+                                <label class="form-label text-muted">打數</label>
+                                <h4 class="text-primary">@Model.AtBats</h4>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="mb-3">
+                                <label class="form-label text-muted">安打</label>
+                                <h4 class="text-success">@Model.Hits</h4>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="mb-3">
+                                <label class="form-label text-muted">打擊率</label>
+                                <h4 class="text-success">@Model.BattingAverage.ToString("F3")</h4>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 進攻數據卡片 -->
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">進攻數據</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-6">
+                            <div class="mb-3">
+                                <label class="form-label text-muted">全壘打</label>
+                                <h4 class="text-danger">@Model.HomeRuns</h4>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="mb-3">
+                                <label class="form-label text-muted">打點</label>
+                                <h4 class="text-danger">@Model.RBIs</h4>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="mb-3">
+                                <label class="form-label text-muted">得分</label>
+                                <h4 class="text-warning">@Model.Runs</h4>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="mb-3">
+                                <label class="form-label text-muted">盜壘</label>
+                                <h4 class="text-warning">@Model.StolenBases</h4>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- 長打數據 -->
+        <div class="col-md-4 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">長打數據</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label text-muted">二安打</label>
+                        <h4>@Model.Doubles</h4>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-muted">三安打</label>
+                        <h4>@Model.Triples</h4>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-muted">長打率</label>
+                        <h4>@Model.SluggingPercentage.ToString("F3")</h4>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 保送與三振 -->
+        <div class="col-md-4 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">保送與三振</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label text-muted">四壞球</label>
+                        <h4 class="text-info">@Model.Walks</h4>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-muted">三振</label>
+                        <h4 class="text-danger">@Model.Strikeouts</h4>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-muted">上壘率</label>
+                        <h4 class="text-info">@Model.OnBasePercentage.ToString("F3")</h4>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 綜合指標 -->
+        <div class="col-md-4 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">綜合指標</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label text-muted">OPS</label>
+                        <h4 class="text-primary">@Model.OPS.ToString("F3")</h4>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-muted">盜壘成功率</label>
+                        <h4 class="text-success">@Model.StolenBasePercentage.ToString("P1")</h4>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-muted">最後更新</label>
+                        <small class="text-muted">@Model.LastUpdated.ToString("yyyy/MM/dd HH:mm")</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 操作按鈕 -->
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex gap-2">
+                <a href="@Url.Action("MonthlyStats", new { playerName = Model.PlayerName, season = Model.Season })"
+                   class="btn btn-primary">
+                    <i class="fas fa-calendar-alt"></i> 查看月度數據
+                </a>
+                <a href="@Url.Action("Stats", "Baseball")" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> 返回列表
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
