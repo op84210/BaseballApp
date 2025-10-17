@@ -40,7 +40,7 @@ function initCharts() {
             {
                 name: '張育成',
                 type: 'line',
-                data: [0.285, 0.298, null, 0.312, 0.289, 0.301], // 3月受傷
+                data: [0.285, 0.298, 0.312, 0.312, 0.289, 0.301], // 3月受傷
                 smooth: true
             }
         ]
@@ -51,8 +51,7 @@ function initCharts() {
     var homerunChart = echarts.init(document.getElementById('homerunChart'));
     var homerunOption = {
         title: {
-            text: '全壘打統計',
-            subtext: '包含受傷球員的調整數據 | 0 表示該月無全壘打'
+            text: '全壘打統計'
         },
         tooltip: {
             trigger: 'axis',
@@ -73,7 +72,7 @@ function initCharts() {
         },
         xAxis: {
             type: 'category',
-            data: ['張育成', '王柏融', '林智勝', '陳金鋒', '彭政閔']
+            data: ['1月', '2月', '3月', '4月', '5月']
         },
         yAxis: {
             type: 'value',
@@ -83,21 +82,7 @@ function initCharts() {
             {
                 name: '全壘打',
                 type: 'bar',
-                data: [15, 22, 18, 28, 0], // 彭政閔該月受傷
-                itemStyle: {
-                    color: function (params) {
-                        // 受傷球員使用不同顏色
-                        var colors = ['#5470c6', '#91cc75', '#fac858', '#ee6666', '#cccccc'];
-                        return colors[params.dataIndex];
-                    }
-                },
-                label: {
-                    show: true,
-                    position: 'top',
-                    formatter: function (params) {
-                        return params.value === 0 ? '受傷' : params.value;
-                    }
-                }
+                data: [1, 5, 4, 3, 2]
             }
         ]
     };
@@ -107,8 +92,7 @@ function initCharts() {
     var radarChart = echarts.init(document.getElementById('radarChart'));
     var radarOption = {
         title: {
-            text: '張育成綜合表現',
-            subtext: '雷達圖顯示多維度表現 | 數值為 0 表示該項目數據不足'
+            text: '張育成綜合表現'
         },
         tooltip: {
             formatter: function (params) {

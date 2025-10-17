@@ -59,8 +59,7 @@ BaseballApp/
 ├── Views/               # Razor 視圖
 │   ├── Home/
 │   │   ├── Index.cshtml
-│   │   ├── Charts.cshtml    # 圖表頁面
-│   │   └── Privacy.cshtml
+│   │   └── Charts.cshtml    # 圖表頁面
 │   └── Shared/             # 共用視圖
 ├── wwwroot/             # 靜態資源
 │   ├── css/
