@@ -1,0 +1,423 @@
+using System.Text.Json;
+using Microsoft.Data.Sqlite;
+using System.Globalization;
+
+var root = @"c:\Users\kwlin\Desktop\ideas\BaseballApp";
+var input = $@"{root}\data\CPBL-2024-OpenData\CPBL-2024-OpenData.json";
+var dbPath = $@"{root}\data\baseball.db";
+
+// 可選：從參數覆寫 --input / --db
+for (int i=0;i<args.Length-1;i++){
+    if(args[i].Equals("--input", StringComparison.OrdinalIgnoreCase)) input = args[i+1];
+    if(args[i].Equals("--db", StringComparison.OrdinalIgnoreCase)) dbPath = args[i+1];
+}
+
+Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
+if (!File.Exists(input)) { Console.Error.WriteLine($"Input not found: {input}"); return; }
+
+using var conn = new SqliteConnection($"Data Source={dbPath};Cache=Shared");
+conn.Open();
+
+// 建立核心資料表（依 schema 定義）
+var ddl = """
+-- tblGame 比賽基本資料
+CREATE TABLE IF NOT EXISTS tblGame (
+  seasonId TEXT NOT NULL,
+  seq INTEGER NOT NULL,
+  date TEXT,
+  stadiumId INTEGER,
+  awayTeamId TEXT,
+  homeTeamId TEXT,
+  PRIMARY KEY (seasonId, seq)
+);
+
+-- tblBatterBox 打者成績
+CREATE TABLE IF NOT EXISTS tblBatterBox (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  gameSeq INTEGER NOT NULL,
+  homeOrAway TEXT NOT NULL,
+  [order] INTEGER,
+  playerId TEXT,
+  PA INTEGER, AB INTEGER, R INTEGER, H INTEGER, RBI INTEGER,
+  [2B] INTEGER, [3B] INTEGER, HR INTEGER,
+  GIDP INTEGER, DP INTEGER, TP INTEGER,
+  BB INTEGER, IBB INTEGER, HBP INTEGER, SO INTEGER,
+  SH INTEGER, SF INTEGER, E INTEGER,
+  SB INTEGER, CS INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_batterbox_game ON tblBatterBox(gameSeq, homeOrAway);
+CREATE INDEX IF NOT EXISTS idx_batterbox_player ON tblBatterBox(playerId);
+
+-- tblPitcherBox 投手成績
+CREATE TABLE IF NOT EXISTS tblPitcherBox (
+  gameSeq INTEGER NOT NULL,
+  homeOrAway TEXT NOT NULL,
+  [order] INTEGER NOT NULL,
+  playerId TEXT,
+  IPOuts INTEGER, NP INTEGER, BF INTEGER,
+  H INTEGER, HR INTEGER,
+  BB INTEGER, IBB INTEGER, HB INTEGER, SO INTEGER,
+  R INTEGER, ER INTEGER,
+  PRIMARY KEY (gameSeq, homeOrAway, [order])
+);
+CREATE INDEX IF NOT EXISTS idx_pitcherbox_player ON tblPitcherBox(playerId);
+
+-- tblPA 打席資料
+CREATE TABLE IF NOT EXISTS tblPA (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  gameSeq INTEGER NOT NULL,
+  homeOrAway TEXT NOT NULL,
+  inning INTEGER,
+  scored INTEGER,
+  batterId TEXT,
+  batterHand TEXT,
+  pitcherId TEXT,
+  pitcherHand TEXT,
+  catcherId TEXT,
+  paRound INTEGER,
+  paOrder INTEGER,
+  isPH INTEGER,
+  awayScores INTEGER,
+  homeScores INTEGER,
+  strikes INTEGER,
+  balls INTEGER,
+  outs INTEGER,
+  bases TEXT,
+  homeWE TEXT,
+  RE TEXT,
+  result TEXT,
+  RBI INTEGER,
+  locationCode TEXT,
+  trajectory TEXT,
+  hardness TEXT,
+  endAwayScores INTEGER,
+  endHomeScores INTEGER,
+  endOuts INTEGER,
+  endBases TEXT,
+  WPA TEXT,
+  RE24 TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_pa_game ON tblPA(gameSeq, homeOrAway, inning);
+CREATE INDEX IF NOT EXISTS idx_pa_batter ON tblPA(batterId);
+CREATE INDEX IF NOT EXISTS idx_pa_pitcher ON tblPA(pitcherId);
+""";
+using (var cmd = conn.CreateCommand()) { cmd.CommandText = ddl; cmd.ExecuteNonQuery(); }
+Console.WriteLine("[OK] Tables created.");
+
+// 解析 JSON 並匯入
+await using var fs = File.OpenRead(input);
+using var doc = await JsonDocument.ParseAsync(fs);
+
+// JSON 應為陣列，每個元素為一場比賽
+if (doc.RootElement.ValueKind != JsonValueKind.Array) {
+    Console.Error.WriteLine("Expected JSON array at root");
+    return;
+}
+
+using var tx = conn.BeginTransaction();
+
+// 準備插入語句
+var insGame = conn.CreateCommand();
+insGame.CommandText = "INSERT OR REPLACE INTO tblGame(seasonId,seq,date,stadiumId,awayTeamId,homeTeamId) VALUES(@sid,@seq,@date,@stadId,@away,@home)";
+insGame.Parameters.Add("@sid");
+insGame.Parameters.Add("@seq");
+insGame.Parameters.Add("@date");
+insGame.Parameters.Add("@stadId");
+insGame.Parameters.Add("@away");
+insGame.Parameters.Add("@home");
+
+var insBatter = conn.CreateCommand();
+insBatter.CommandText = """
+INSERT INTO tblBatterBox(gameSeq,homeOrAway,[order],playerId,PA,AB,R,H,RBI,[2B],[3B],HR,GIDP,DP,TP,BB,IBB,HBP,SO,SH,SF,E,SB,CS)
+VALUES(@seq,@hoa,@ord,@pid,@pa,@ab,@r,@h,@rbi,@b2,@b3,@hr,@gidp,@dp,@tp,@bb,@ibb,@hbp,@so,@sh,@sf,@e,@sb,@cs)
+""";
+insGame.Parameters.Add("@seq");
+insBatter.Parameters.Add("@hoa");
+insBatter.Parameters.Add("@ord");
+insBatter.Parameters.Add("@pid");
+insBatter.Parameters.Add("@pa");
+insBatter.Parameters.Add("@ab");
+insBatter.Parameters.Add("@r");
+insBatter.Parameters.Add("@h");
+insBatter.Parameters.Add("@rbi");
+insBatter.Parameters.Add("@b2");
+insBatter.Parameters.Add("@b3");
+insBatter.Parameters.Add("@hr");
+insBatter.Parameters.Add("@gidp");
+insBatter.Parameters.Add("@dp");
+insBatter.Parameters.Add("@tp");
+insBatter.Parameters.Add("@bb");
+insBatter.Parameters.Add("@ibb");
+insBatter.Parameters.Add("@hbp");
+insBatter.Parameters.Add("@so");
+insBatter.Parameters.Add("@sh");
+insBatter.Parameters.Add("@sf");
+insBatter.Parameters.Add("@e");
+insBatter.Parameters.Add("@sb");
+insBatter.Parameters.Add("@cs");
+
+var insPitcher = conn.CreateCommand();
+insPitcher.CommandText = """
+INSERT OR REPLACE INTO tblPitcherBox(gameSeq,homeOrAway,[order],playerId,IPOuts,NP,BF,H,HR,BB,IBB,HB,SO,R,ER)
+VALUES(@seq,@hoa,@ord,@pid,@ipo,@np,@bf,@h,@hr,@bb,@ibb,@hb,@so,@r,@er)
+""";
+insPitcher.Parameters.Add("@seq");
+insPitcher.Parameters.Add("@hoa");
+insPitcher.Parameters.Add("@ord");
+insPitcher.Parameters.Add("@pid");
+insPitcher.Parameters.Add("@ipo");
+insPitcher.Parameters.Add("@np");
+insPitcher.Parameters.Add("@bf");
+insPitcher.Parameters.Add("@h");
+insPitcher.Parameters.Add("@hr");
+insPitcher.Parameters.Add("@bb");
+insPitcher.Parameters.Add("@ibb");
+insPitcher.Parameters.Add("@hb");
+insPitcher.Parameters.Add("@so");
+insPitcher.Parameters.Add("@r");
+insPitcher.Parameters.Add("@er");
+
+var insPA = conn.CreateCommand();
+insPA.CommandText = """
+INSERT INTO tblPA(gameSeq,homeOrAway,inning,scored,batterId,batterHand,pitcherId,pitcherHand,catcherId,paRound,paOrder,isPH,
+  awayScores,homeScores,strikes,balls,outs,bases,homeWE,RE,result,RBI,locationCode,trajectory,hardness,
+  endAwayScores,endHomeScores,endOuts,endBases,WPA,RE24)
+VALUES(@seq,@hoa,@inn,@sc,@bid,@bh,@pid,@ph,@cid,@pr,@po,@isph,@aws,@hms,@str,@bal,@out,@bas,@hwe,@re,@res,@rbi,@loc,@trj,@hrd,@eaws,@ehms,@eout,@ebas,@wpa,@re24)
+""";
+insPA.Parameters.Add("@seq");
+insPA.Parameters.Add("@hoa");
+insPA.Parameters.Add("@inn");
+insPA.Parameters.Add("@sc");
+insPA.Parameters.Add("@bid");
+insPA.Parameters.Add("@bh");
+insPA.Parameters.Add("@pid");
+insPA.Parameters.Add("@ph");
+insPA.Parameters.Add("@cid");
+insPA.Parameters.Add("@pr");
+insPA.Parameters.Add("@po");
+insPA.Parameters.Add("@isph");
+insPA.Parameters.Add("@aws");
+insPA.Parameters.Add("@hms");
+insPA.Parameters.Add("@str");
+insPA.Parameters.Add("@bal");
+insPA.Parameters.Add("@out");
+insPA.Parameters.Add("@bas");
+insPA.Parameters.Add("@hwe");
+insPA.Parameters.Add("@re");
+insPA.Parameters.Add("@res");
+insPA.Parameters.Add("@rbi");
+insPA.Parameters.Add("@loc");
+insPA.Parameters.Add("@trj");
+insPA.Parameters.Add("@hrd");
+insPA.Parameters.Add("@eaws");
+insPA.Parameters.Add("@ehms");
+insPA.Parameters.Add("@eout");
+insPA.Parameters.Add("@ebas");
+insPA.Parameters.Add("@wpa");
+insPA.Parameters.Add("@re24");
+
+int gameCount = 0, batterCount = 0, pitcherCount = 0, paCount = 0;
+
+foreach (var game in doc.RootElement.EnumerateArray())
+{
+    if (game.ValueKind != JsonValueKind.Object) continue;
+
+    string seasonId = GetString(game, "seasonId") ?? "";
+    int seq = GetInt(game, "seq");
+    string date = GetString(game, "date") ?? "";
+    int stadiumId = GetInt(game, "stadiumId");
+    string awayTeamId = GetString(game, "awayTeamId") ?? "";
+    string homeTeamId = GetString(game, "homeTeamId") ?? "";
+
+    // 插入 tblGame
+    insGame.Parameters["@sid"].Value = seasonId;
+    insGame.Parameters["@seq"].Value = seq;
+    insGame.Parameters["@date"].Value = date;
+    insGame.Parameters["@stadId"].Value = stadiumId;
+    insGame.Parameters["@away"].Value = awayTeamId;
+    insGame.Parameters["@home"].Value = homeTeamId;
+    insGame.ExecuteNonQuery();
+    gameCount++;
+
+    // awayBatterBox
+    if (game.TryGetProperty("awayBatterBox", out var awayBat) && awayBat.ValueKind == JsonValueKind.Array)
+    {
+        foreach (var b in awayBat.EnumerateArray())
+        {
+            InsertBatter(insBatter, seq, "away", b);
+            batterCount++;
+        }
+    }
+    // homeBatterBox
+    if (game.TryGetProperty("homeBatterBox", out var homeBat) && homeBat.ValueKind == JsonValueKind.Array)
+    {
+        foreach (var b in homeBat.EnumerateArray())
+        {
+            InsertBatter(insBatter, seq, "home", b);
+            batterCount++;
+        }
+    }
+
+    // awayPitcherBox
+    if (game.TryGetProperty("awayPitcherBox", out var awayPit) && awayPit.ValueKind == JsonValueKind.Array)
+    {
+        foreach (var p in awayPit.EnumerateArray())
+        {
+            InsertPitcher(insPitcher, seq, "away", p);
+            pitcherCount++;
+        }
+    }
+    // homePitcherBox
+    if (game.TryGetProperty("homePitcherBox", out var homePit) && homePit.ValueKind == JsonValueKind.Array)
+    {
+        foreach (var p in homePit.EnumerateArray())
+        {
+            InsertPitcher(insPitcher, seq, "home", p);
+            pitcherCount++;
+        }
+    }
+
+    // awayPAList
+    if (game.TryGetProperty("awayPAList", out var awayPA) && awayPA.ValueKind == JsonValueKind.Array)
+    {
+        foreach (var pa in awayPA.EnumerateArray())
+        {
+            InsertPA(insPA, seq, "away", pa);
+            paCount++;
+        }
+    }
+    // homePAList
+    if (game.TryGetProperty("homePAList", out var homePA) && homePA.ValueKind == JsonValueKind.Array)
+    {
+        foreach (var pa in homePA.EnumerateArray())
+        {
+            InsertPA(insPA, seq, "home", pa);
+            paCount++;
+        }
+    }
+}
+
+tx.Commit();
+
+Console.WriteLine($"[OK] SQLite ready: {dbPath}");
+Console.WriteLine($"  Games: {gameCount}");
+Console.WriteLine($"  Batters: {batterCount}");
+Console.WriteLine($"  Pitchers: {pitcherCount}");
+Console.WriteLine($"  PA: {paCount}");
+
+// === 輔助函數 ===
+void InsertBatter(SqliteCommand cmd, int seq, string hoa, JsonElement b)
+{
+    cmd.Parameters["@seq"].Value = seq;
+    cmd.Parameters["@hoa"].Value = hoa;
+    cmd.Parameters["@ord"].Value = GetInt(b, "order");
+    cmd.Parameters["@pid"].Value = GetString(b, "playerId") ?? "";
+    cmd.Parameters["@pa"].Value = GetInt(b, "PA");
+    cmd.Parameters["@ab"].Value = GetInt(b, "AB");
+    cmd.Parameters["@r"].Value = GetInt(b, "R");
+    cmd.Parameters["@h"].Value = GetInt(b, "H");
+    cmd.Parameters["@rbi"].Value = GetInt(b, "RBI");
+    cmd.Parameters["@b2"].Value = GetInt(b, "2B");
+    cmd.Parameters["@b3"].Value = GetInt(b, "3B");
+    cmd.Parameters["@hr"].Value = GetInt(b, "HR");
+    cmd.Parameters["@gidp"].Value = GetInt(b, "GIDP");
+    cmd.Parameters["@dp"].Value = GetInt(b, "DP");
+    cmd.Parameters["@tp"].Value = GetInt(b, "TP");
+    cmd.Parameters["@bb"].Value = GetInt(b, "BB");
+    cmd.Parameters["@ibb"].Value = GetInt(b, "IBB");
+    cmd.Parameters["@hbp"].Value = GetInt(b, "HBP");
+    cmd.Parameters["@so"].Value = GetInt(b, "SO");
+    cmd.Parameters["@sh"].Value = GetInt(b, "SH");
+    cmd.Parameters["@sf"].Value = GetInt(b, "SF");
+    cmd.Parameters["@e"].Value = GetInt(b, "E");
+    cmd.Parameters["@sb"].Value = GetInt(b, "SB");
+    cmd.Parameters["@cs"].Value = GetInt(b, "CS");
+    cmd.ExecuteNonQuery();
+}
+
+void InsertPitcher(SqliteCommand cmd, int seq, string hoa, JsonElement p)
+{
+    cmd.Parameters["@seq"].Value = seq;
+    cmd.Parameters["@hoa"].Value = hoa;
+    cmd.Parameters["@ord"].Value = GetInt(p, "order");
+    cmd.Parameters["@pid"].Value = GetString(p, "playerId") ?? "";
+    cmd.Parameters["@ipo"].Value = GetInt(p, "IPOuts");
+    cmd.Parameters["@np"].Value = GetInt(p, "NP");
+    cmd.Parameters["@bf"].Value = GetInt(p, "BF");
+    cmd.Parameters["@h"].Value = GetInt(p, "H");
+    cmd.Parameters["@hr"].Value = GetInt(p, "HR");
+    cmd.Parameters["@bb"].Value = GetInt(p, "BB");
+    cmd.Parameters["@ibb"].Value = GetInt(p, "IBB");
+    cmd.Parameters["@hb"].Value = GetInt(p, "HB");
+    cmd.Parameters["@so"].Value = GetInt(p, "SO");
+    cmd.Parameters["@r"].Value = GetInt(p, "R");
+    cmd.Parameters["@er"].Value = GetInt(p, "ER");
+    cmd.ExecuteNonQuery();
+}
+
+void InsertPA(SqliteCommand cmd, int seq, string hoa, JsonElement pa)
+{
+    cmd.Parameters["@seq"].Value = seq;
+    cmd.Parameters["@hoa"].Value = hoa;
+    cmd.Parameters["@inn"].Value = GetInt(pa, "inning");
+    cmd.Parameters["@sc"].Value = GetBool(pa, "scored") ? 1 : 0;
+    cmd.Parameters["@bid"].Value = GetString(pa, "batterId") ?? "";
+    cmd.Parameters["@bh"].Value = GetString(pa, "batterHand") ?? "";
+    cmd.Parameters["@pid"].Value = GetString(pa, "pitcherId") ?? "";
+    cmd.Parameters["@ph"].Value = GetString(pa, "pitcherHand") ?? "";
+    cmd.Parameters["@cid"].Value = GetString(pa, "catcherId") ?? "";
+    cmd.Parameters["@pr"].Value = GetInt(pa, "paRound");
+    cmd.Parameters["@po"].Value = GetInt(pa, "paOrder");
+    cmd.Parameters["@isph"].Value = GetBool(pa, "isPH") ? 1 : 0;
+    cmd.Parameters["@aws"].Value = GetInt(pa, "awayScores");
+    cmd.Parameters["@hms"].Value = GetInt(pa, "homeScores");
+    cmd.Parameters["@str"].Value = GetInt(pa, "strikes");
+    cmd.Parameters["@bal"].Value = GetInt(pa, "balls");
+    cmd.Parameters["@out"].Value = GetInt(pa, "outs");
+    cmd.Parameters["@bas"].Value = GetString(pa, "bases") ?? "";
+    cmd.Parameters["@hwe"].Value = GetString(pa, "homeWE") ?? "";
+    cmd.Parameters["@re"].Value = GetString(pa, "RE") ?? "";
+    cmd.Parameters["@res"].Value = GetString(pa, "result") ?? "";
+    cmd.Parameters["@rbi"].Value = GetInt(pa, "RBI");
+    cmd.Parameters["@loc"].Value = GetString(pa, "locationCode") ?? "";
+    cmd.Parameters["@trj"].Value = GetString(pa, "trajectory") ?? "";
+    cmd.Parameters["@hrd"].Value = GetString(pa, "hardness") ?? "";
+    cmd.Parameters["@eaws"].Value = GetInt(pa, "endAwayScores");
+    cmd.Parameters["@ehms"].Value = GetInt(pa, "endHomeScores");
+    cmd.Parameters["@eout"].Value = GetInt(pa, "endOuts");
+    cmd.Parameters["@ebas"].Value = GetString(pa, "endBases") ?? "";
+    cmd.Parameters["@wpa"].Value = GetString(pa, "WPA") ?? "";
+    cmd.Parameters["@re24"].Value = GetString(pa, "RE24") ?? "";
+    cmd.ExecuteNonQuery();
+}
+
+// 小工具函式
+static string? GetString(JsonElement obj, params string[] names)
+{
+    foreach (var n in names)
+        foreach (var p in obj.EnumerateObject())
+            if (p.NameEquals(n) || p.Name.Equals(n, StringComparison.OrdinalIgnoreCase))
+                return p.Value.ValueKind switch {
+                    JsonValueKind.String => p.Value.GetString(),
+                    JsonValueKind.Number => p.Value.ToString(),
+                    _ => null
+                };
+    return null;
+}
+static int GetInt(JsonElement obj, params string[] names)
+{
+    var s = GetString(obj, names);
+    return int.TryParse(s, out var v) ? v : 0;
+}
+static bool TryParseDate(string? s, out DateTime d)
+{
+    if (!string.IsNullOrWhiteSpace(s))
+    {
+        if (DateTime.TryParse(s, out d)) return true;
+        var formats = new[] { "yyyy-MM-dd","yyyy/MM/dd","yyyyMMdd" };
+        foreach (var f in formats)
+            if (DateTime.TryParseExact(s, f, CultureInfo.InvariantCulture, DateTimeStyles.None, out d))
+                return true;
+    }
+    d = default; return false;
+}
