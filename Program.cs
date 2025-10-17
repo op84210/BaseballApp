@@ -2,6 +2,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllersWithViews();
+builder.Services.AddControllers(); // 加入 API 控制器
 
 // 註冊 HTTP 客戶端
 builder.Services.AddHttpClient();
@@ -31,5 +32,6 @@ app.MapControllerRoute(
     pattern: "{controller=Home}/{action=Charts}/{id?}")
     .WithStaticAssets();
 
+app.MapControllers(); // 映射 /api/*
 
 app.Run();
