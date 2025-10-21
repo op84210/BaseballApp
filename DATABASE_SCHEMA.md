@@ -2,34 +2,44 @@
 
 ## 目錄
 
-- [資料表](#資料表)
-  - [比賽相關](#比賽相關)
-    - [tblGame - 比賽基本資料](#tblgame---比賽基本資料)
-    - [tblScores - 得分資料](#tblscores---得分資料)
-  - [主檔資料](#主檔資料)
-    - [tblStadium - 比賽場地資料](#tblstadium---比賽場地資料)
-    - [tblSeason - 賽事資料](#tblseason---賽事資料)
-    - [tblTeam - 球隊資料](#tblteam---球隊資料)
-    - [tblPlayer - 球員資料](#tblplayer---球員資料)
-  - [成績資料](#成績資料)
-    - [tblBatterBox - 打者成績](#tblbatterbox---打者成績)
-    - [tblPitcherBox - 投手成績](#tblpitcherbox---投手成績)
-  - [打席相關](#打席相關)
-    - [tblPA - 打席資料](#tblpa---打席資料)
-    - [tblPitchCode - 投球結果列表](#tblpitchcode---投球結果列表)
-    - [tblEvent - 打席內事件](#tblevent---打席內事件)
-    - [tblRunner - 跑者資料](#tblrunner---跑者資料)
-  - [代碼資料](#代碼資料)
-    - [tblCode - 代碼資料](#tblcode---代碼資料)
-- [代碼對照表](#代碼對照表)
-  - [BASES - 壘包狀況](#bases---壘包狀況)
-  - [PITCH CODE - 投球結果](#pitch-code---投球結果)
-  - [EVENT TYPE - 事件型態](#event-type---事件型態)
-  - [PITCH TYPE - 球種](#pitch-type---球種)
-  - [RUNNER TYPE - 跑壘型態](#runner-type---跑壘型態)
-  - [RESULT - 打席結果](#result---打席結果)
-  - [TRAJECTORY - 擊球彈道](#trajectory---擊球彈道)
-  - [HARDNESS - 擊球力道](#hardness---擊球力道)
+- [棒球資料庫結構定義](#棒球資料庫結構定義)
+  - [目錄](#目錄)
+  - [資料表](#資料表)
+    - [比賽相關](#比賽相關)
+      - [tblGame - 比賽基本資料](#tblgame---比賽基本資料)
+      - [tblScores - 得分資料](#tblscores---得分資料)
+    - [主檔資料](#主檔資料)
+      - [tblStadium - 比賽場地資料](#tblstadium---比賽場地資料)
+      - [tblSeason - 賽事資料](#tblseason---賽事資料)
+      - [tblTeam - 球隊資料](#tblteam---球隊資料)
+      - [tblBatter - 球員資料\_打者](#tblbatter---球員資料_打者)
+      - [tblPitcher - 球員資料\_投手](#tblpitcher---球員資料_投手)
+    - [成績資料](#成績資料)
+      - [tblBatterBox - 打者成績](#tblbatterbox---打者成績)
+      - [tblPitcherBox - 投手成績](#tblpitcherbox---投手成績)
+    - [打席相關](#打席相關)
+      - [tblPA - 打席資料](#tblpa---打席資料)
+      - [tblEvent - 打席內事件](#tblevent---打席內事件)
+      - [tblRunner - 跑者資料](#tblrunner---跑者資料)
+    - [代碼資料](#代碼資料)
+      - [tblCodeBases - 壘包狀況代碼](#tblcodebases---壘包狀況代碼)
+      - [tblCodePitchCode - 投球結果代碼](#tblcodepitchcode---投球結果代碼)
+      - [tblCodeEventType - 事件型態代碼](#tblcodeeventtype---事件型態代碼)
+      - [tblCodePitchType - 球種代碼](#tblcodepitchtype---球種代碼)
+      - [tblCodeRunnerType - 跑壘型態代碼](#tblcoderunnertype---跑壘型態代碼)
+      - [tblCodeResult - 打席結果代碼](#tblcoderesult---打席結果代碼)
+      - [tblCodeTrajectory - 擊球彈道代碼](#tblcodetrajectory---擊球彈道代碼)
+      - [tblCodeHardness - 擊球力道代碼](#tblcodehardness---擊球力道代碼)
+  - [代碼對照表](#代碼對照表)
+    - [BASES - 壘包狀況](#bases---壘包狀況)
+    - [PITCH CODE - 投球結果](#pitch-code---投球結果)
+    - [EVENT TYPE - 事件型態](#event-type---事件型態)
+    - [PITCH TYPE - 球種](#pitch-type---球種)
+    - [RUNNER TYPE - 跑壘型態](#runner-type---跑壘型態)
+    - [RESULT - 打席結果](#result---打席結果)
+    - [TRAJECTORY - 擊球彈道](#trajectory---擊球彈道)
+    - [HARDNESS - 擊球力道](#hardness---擊球力道)
+  - [備註](#備註)
 
 ---
 
@@ -52,10 +62,13 @@
 
 | 欄位名稱 | 型別 | 約束 | 說明 | 備註 |
 |---------|------|------|------|------|
+| seasonId | String | PK | 賽事ID | |
 | gameSeq | Int | PK | 比賽編號 | |
 | homeOrAway | String | PK | 主/客場 | |
 | inning | Int | PK | 局數 | |
 | score | Int | | 得分 | |
+
+外鍵：`FOREIGN KEY (seasonId, gameSeq) REFERENCES tblGame(seasonId, seq)`
 
 ### 主檔資料
 
@@ -64,7 +77,7 @@
 | 欄位名稱 | 型別 | 約束 | 說明 | 備註 |
 |---------|------|------|------|------|
 | ID | Int | PK | 比賽場地ID | 自動增加 |
-| stadium | String | | 比賽場地 | |
+| stadium | String | UNIQUE | 比賽場地 | |
 
 #### tblSeason - 賽事資料
 
@@ -80,7 +93,15 @@
 | teamId | String | PK | 球隊ID | |
 | team | String | | 球隊名稱 | |
 
-#### tblPlayer - 球員資料
+#### tblBatter - 球員資料_打者
+
+| 欄位名稱 | 型別 | 約束 | 說明 | 備註 |
+|---------|------|------|------|------|
+| playerId | String | PK | 球員ID | |
+| playerNumber | String | | 球員背號 | |
+| playerName | String | | 球員名稱 | |
+
+#### tblPitcher - 球員資料_投手
 
 | 欄位名稱 | 型別 | 約束 | 說明 | 備註 |
 |---------|------|------|------|------|
@@ -95,9 +116,11 @@
 | 欄位名稱 | 型別 | 約束 | 說明 | 備註 |
 |---------|------|------|------|------|
 | ID | Int | PK | 流水號 | 自動增加 |
-| gameSeq | Int | PK | 比賽編號 | |
-| homeOrAway | String | PK | 主/客場 | |
+| seasonId | String | | 賽事ID | |
+| gameSeq | Int | | 比賽編號 | |
+| homeOrAway | String | | 主/客場 | |
 | order | Int | | 打序 | 同隊第二個相同打序即為替補上場 |
+| subOrder | Int | | 替補順序 | 0=先發, 1=第一個替補, 2=第二個替補... |
 | playerId | String | | 球員ID | |
 | PA | Int | | 打席 | |
 | AB | Int | | 打數 | |
@@ -120,13 +143,20 @@
 | SB | Int | | 盜壘成功 | |
 | CS | Int | | 盜壘失敗 | |
 
+唯一鍵：`UNIQUE(seasonId, gameSeq, homeOrAway, [order], subOrder)`  
+外鍵：
+- `FOREIGN KEY (seasonId, gameSeq) REFERENCES tblGame(seasonId, seq)`
+- `FOREIGN KEY (playerId) REFERENCES tblBatter(playerId)`
+
 #### tblPitcherBox - 投手成績
 
 | 欄位名稱 | 型別 | 約束 | 說明 | 備註 |
 |---------|------|------|------|------|
-| gameSeq | Int | PK | 比賽編號 | |
-| homeOrAway | String | PK | 主/客場 | |
-| order | Int | PK | 上場順序 | |
+| ID | Int | PK | 流水號 | 自動增加 |
+| seasonId | String | | 賽事ID | |
+| gameSeq | Int | | 比賽編號 | |
+| homeOrAway | String | | 主/客場 | |
+| order | Int | | 上場順序 | |
 | playerId | String | | 球員ID | |
 | IPOuts | Int | | 出局數 | 非常見IP局數，是出局數 |
 | NP | Int | | 用球數 | |
@@ -140,6 +170,11 @@
 | R | Int | | 失分 | |
 | ER | Int | | 責失 | |
 
+唯一鍵：`UNIQUE(seasonId, gameSeq, homeOrAway, [order])`  
+外鍵：
+- `FOREIGN KEY (seasonId, gameSeq) REFERENCES tblGame(seasonId, seq)`
+- `FOREIGN KEY (playerId) REFERENCES tblPitcher(playerId)`
+
 ### 打席相關
 
 #### tblPA - 打席資料
@@ -147,9 +182,11 @@
 | 欄位名稱 | 型別 | 約束 | 說明 | 備註 |
 |---------|------|------|------|------|
 | ID | Int | PK | 打席ID | 自動增加 |
-| gameSeq | Int | PK | 比賽編號 | |
-| homeOrAway | String | PK | 主/客場 | |
+| seasonId | String | | 賽事ID | |
+| gameSeq | Int | | 比賽編號 | |
+| homeOrAway | String | | 主/客場 | |
 | inning | Int | | 局數 | |
+| paSeq | Int | | 打席序號 | 該局第幾個打席（1, 2, 3...） |
 | scored | Boolean | | 有得分 | |
 | batterId | String | | 打者ID | |
 | batterHand | String | | 打者用手 | R / L |
@@ -176,16 +213,20 @@
 | endHomeScores | Int | | 打席結束後主場分 | |
 | endOuts | Int | | 打席結束後出局數 | |
 | endBases | String | | 打席結束後壘包狀況 | |
-| WPA | String | | 勝率增加 | |
-| RE24 | String | | 得分期望值增加 | |
+| WPA | decimal | | 勝率增加 | |
+| RE24 | decimal | | 得分期望值增加 | |
 
-#### tblPitchCode - 投球結果列表
-
-| 欄位名稱 | 型別 | 約束 | 說明 | 備註 |
-|---------|------|------|------|------|
-| paID | Int | PK | 打席ID | |
-| order | Int | PK | 順序 | |
-| pitchCode | String | | 投球結果 | |
+唯一鍵：`UNIQUE(seasonId, gameSeq, homeOrAway, inning, paSeq)`  
+外鍵：
+- `FOREIGN KEY (seasonId, gameSeq) REFERENCES tblGame(seasonId, seq)`
+- `FOREIGN KEY (batterId) REFERENCES tblBatter(playerId)`
+- `FOREIGN KEY (pitcherId) REFERENCES tblPitcher(playerId)`
+- `FOREIGN KEY (catcherId) REFERENCES tblBatter(playerId)`
+- `FOREIGN KEY (bases) REFERENCES tblCodeBases(code)`
+- `FOREIGN KEY (result) REFERENCES tblCodeResult(code)`
+- `FOREIGN KEY (trajectory) REFERENCES tblCodeTrajectory(code)`
+- `FOREIGN KEY (hardness) REFERENCES tblCodeHardness(code)`
+- `FOREIGN KEY (endBases) REFERENCES tblCodeBases(code)`
 
 #### tblEvent - 打席內事件
 
@@ -203,15 +244,15 @@
 | batterID | String | | 打者ID | |
 | pitchCode | String | | 投球結果 | |
 | pitchType | String | | 球種 | |
-| velocity | String | | 球速 | 以字串儲存，非所有球都有 |
-| coordX | String | | COORD X | 以字串儲存，非所有球都有 |
-| coordY | String | | COORD Y | 以字串儲存，非所有球都有 |
+| velocity | Int | | 球速 | NULL 表示無資料 |
+| coordX | Int | | COORD X | NULL 表示無資料 |
+| coordY | Int | | COORD Y | NULL 表示無資料 |
 
 #### tblRunner - 跑者資料
 
 | 欄位名稱 | 型別 | 約束 | 說明 | 備註 |
 |---------|------|------|------|------|
-| ID | Int | PK | 流水號 | |
+| ID | Int | PK | 流水號 | 自動增加 |
 | eventID | Int | PK | 事件ID | |
 | type | String | | 跑壘型態 | |
 | runnerID | String | | 跑者ID | |
@@ -223,13 +264,61 @@
 
 ### 代碼資料
 
-#### tblCode - 代碼資料
+#### tblCodeBases - 壘包狀況代碼
 
-| 欄位名稱 | 型別 | 約束 | 說明 | 備註 |
-|---------|------|------|------|------|
-| codeKind | String | PK | 代碼類型 | |
-| code | String | PK | 代碼值 | |
-| name | String | | 代碼名稱 | |
+| 欄位名稱 | 型別 | 約束 | 說明 |
+|---------|------|------|------|
+| code | String | PK | 代碼值 |
+| name | String | | 代碼名稱 |
+
+#### tblCodePitchCode - 投球結果代碼
+
+| 欄位名稱 | 型別 | 約束 | 說明 |
+|---------|------|------|------|
+| code | String | PK | 代碼值 |
+| name | String | | 代碼名稱 |
+
+#### tblCodeEventType - 事件型態代碼
+
+| 欄位名稱 | 型別 | 約束 | 說明 |
+|---------|------|------|------|
+| code | String | PK | 代碼值 |
+| name | String | | 代碼名稱 |
+
+#### tblCodePitchType - 球種代碼
+
+| 欄位名稱 | 型別 | 約束 | 說明 |
+|---------|------|------|------|
+| code | String | PK | 代碼值 |
+| name | String | | 代碼名稱 |
+
+#### tblCodeRunnerType - 跑壘型態代碼
+
+| 欄位名稱 | 型別 | 約束 | 說明 |
+|---------|------|------|------|
+| code | String | PK | 代碼值 |
+| name | String | | 代碼名稱 |
+
+#### tblCodeResult - 打席結果代碼
+
+| 欄位名稱 | 型別 | 約束 | 說明 |
+|---------|------|------|------|
+| code | String | PK | 代碼值 |
+| name | String | | 代碼名稱 |
+
+#### tblCodeTrajectory - 擊球彈道代碼
+
+| 欄位名稱 | 型別 | 約束 | 說明 |
+|---------|------|------|------|
+| code | String | PK | 代碼值 |
+| name | String | | 代碼名稱 |
+
+#### tblCodeHardness - 擊球力道代碼
+
+| 欄位名稱 | 型別 | 約束 | 說明 |
+|---------|------|------|------|
+| code | String | PK | 代碼值 |
+| name | String | | 代碼名稱 |
 
 ---
 
@@ -345,7 +434,7 @@
 
 ## 備註
 
-- 本文件基於專案內 `Table Schema.txt` 自動生成
+- 本文件同步於專案內 `Table Schema.txt`
 - 欄位型別與約束條件請依實際資料庫實作調整（如 SQLite、SQL Server、PostgreSQL）
 - 自動增加欄位建議使用 `AUTOINCREMENT` (SQLite) 或 `IDENTITY` (SQL Server)
 - 日期與時間欄位建議使用 ISO 8601 格式 (`yyyy-MM-dd`)
