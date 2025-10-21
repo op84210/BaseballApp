@@ -11,7 +11,7 @@ class Program
     {
         /// 設定預設路徑與參數
         string root = @"c:\Users\kwlin\Desktop\ideas\BaseballApp";
-        var input = $@"{root}\data\CPBL-2024-OpenData\CPBL-2024-OpenData.json";
+        var input = $@"{root}\data\CPBL-2024-Challenge-OpenData\CPBL-2024-Challenge-G1.json";
         var dbPath = $@"{root}\data\baseball.db";
 
         /// 解析命令列參數
@@ -74,6 +74,33 @@ class Program
                 return el.GetInt32();
         return 0;
     }
+
+    private static int? GetIntNullable(JsonElement obj, params string[] names)
+    {
+        foreach (var n in names)
+            if (obj.TryGetProperty(n, out var el) && el.ValueKind == JsonValueKind.Number)
+                return el.GetInt32();
+        return null;
+    }
+
+    private static decimal? GetDecimal(JsonElement obj, params string[] names)
+    {
+        foreach (var n in names)
+        {
+            if (obj.TryGetProperty(n, out var el))
+            {
+                if (el.ValueKind == JsonValueKind.Number)
+                    return el.GetDecimal();
+                if (el.ValueKind == JsonValueKind.String)
+                {
+                    var str = el.GetString();
+                    if (!string.IsNullOrEmpty(str) && decimal.TryParse(str, out var value))
+                        return value;
+                }
+            }
+        }
+        return null;
+    }
     
     /// <summary>
     /// 取得比賽資料列舉（支援陣列或單一物件）
@@ -115,84 +142,17 @@ class Program
         CreateTblGame(conn);
         CreateTblScores(conn);
 
+        // 建立 Stats Tables
+        CreateTblBatterBox(conn);
+        CreateTblPitcherBox(conn);
+
+        // 建立 PA Tables
+        CreateTblPA(conn);
+        CreateTblEvent(conn);
+        CreateTblRunner(conn);
+
         // 建立 Code Tables
         CreateCodeTables(conn);
-
-        // var ddl = @"
-
-        //     -- tblBatterBox
-        //     CREATE TABLE IF NOT EXISTS tblBatterBox (
-        //         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        //         gameSeq INTEGER NOT NULL,
-        //         homeOrAway TEXT NOT NULL,
-        //         [order] INTEGER,
-        //         playerId TEXT,
-        //         PA INTEGER, AB INTEGER, R INTEGER, H INTEGER, RBI INTEGER,
-        //         [2B] INTEGER, [3B] INTEGER, HR INTEGER,
-        //         GIDP INTEGER, DP INTEGER, TP INTEGER,
-        //         BB INTEGER, IBB INTEGER, HBP INTEGER, SO INTEGER,
-        //         SH INTEGER, SF INTEGER, E INTEGER,
-        //         SB INTEGER, CS INTEGER
-        //     );
-        //     CREATE INDEX IF NOT EXISTS idx_batterbox_game ON tblBatterBox(gameSeq, homeOrAway);
-        //     CREATE INDEX IF NOT EXISTS idx_batterbox_player ON tblBatterBox(playerId);
-
-        //     -- tblPitcherBox
-        //     CREATE TABLE IF NOT EXISTS tblPitcherBox (
-        //         gameSeq INTEGER NOT NULL,
-        //         homeOrAway TEXT NOT NULL,
-        //         [order] INTEGER NOT NULL,
-        //         playerId TEXT,
-        //         IPOuts INTEGER, NP INTEGER, BF INTEGER,
-        //         H INTEGER, HR INTEGER,
-        //         BB INTEGER, IBB INTEGER, HB INTEGER, SO INTEGER,
-        //         R INTEGER, ER INTEGER,
-        //         PRIMARY KEY (gameSeq, homeOrAway, [order])
-        //     );
-        //     CREATE INDEX IF NOT EXISTS idx_pitcherbox_player ON tblPitcherBox(playerId);
-
-        //     -- tblPA
-        //     CREATE TABLE IF NOT EXISTS tblPA (
-        //         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        //         gameSeq INTEGER NOT NULL,
-        //         homeOrAway TEXT NOT NULL,
-        //         inning INTEGER,
-        //         scored INTEGER,
-        //         batterId TEXT,
-        //         batterHand TEXT,
-        //         pitcherId TEXT,
-        //         pitcherHand TEXT,
-        //         catcherId TEXT,
-        //         paRound INTEGER,
-        //         paOrder INTEGER,
-        //         isPH INTEGER,
-        //         awayScores INTEGER,
-        //         homeScores INTEGER,
-        //         strikes INTEGER,
-        //         balls INTEGER,
-        //         outs INTEGER,
-        //         bases TEXT,
-        //         homeWE TEXT,
-        //         RE TEXT,
-        //         result TEXT,
-        //         RBI INTEGER,
-        //         locationCode TEXT,
-        //         trajectory TEXT,
-        //         hardness TEXT,
-        //         endAwayScores INTEGER,
-        //         endHomeScores INTEGER,
-        //         endOuts INTEGER,
-        //         endBases TEXT,
-        //         WPA TEXT,
-        //         RE24 TEXT
-        //     );
-        //     CREATE INDEX IF NOT EXISTS idx_pa_game ON tblPA(gameSeq, homeOrAway, inning);
-        //     CREATE INDEX IF NOT EXISTS idx_pa_batter ON tblPA(batterId);
-        //     CREATE INDEX IF NOT EXISTS idx_pa_pitcher ON tblPA(pitcherId);
-        // """;
-
-        // using (var cmd = conn.CreateCommand()) { cmd.CommandText = ddl; cmd.ExecuteNonQuery(); }
-        // Console.WriteLine("[OK] Tables created.");
     }
 
     /// <summary>
@@ -347,6 +307,175 @@ class Program
     }
 
     /// <summary>
+    /// 建立 tblBatterBox 資料表
+    /// </summary>
+    /// <param name="conn">
+    /// 資料庫連線
+    /// </param>
+    private static void CreateTblBatterBox(SqliteConnection conn)
+    {
+        var ddl = @"
+            -- tblBatterBox
+            CREATE TABLE IF NOT EXISTS tblBatterBox (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                seasonId TEXT NOT NULL,
+                gameSeq INTEGER NOT NULL,
+                homeOrAway TEXT NOT NULL,
+                [order] INTEGER NOT NULL,
+                subOrder INTEGER NOT NULL,
+                playerId TEXT,
+                PA INTEGER, AB INTEGER, R INTEGER, H INTEGER, RBI INTEGER,
+                [2B] INTEGER, [3B] INTEGER, HR INTEGER,
+                GIDP INTEGER, DP INTEGER, TP INTEGER,
+                BB INTEGER, IBB INTEGER, HBP INTEGER, SO INTEGER,
+                SH INTEGER, SF INTEGER, E INTEGER,
+                SB INTEGER, CS INTEGER,
+                UNIQUE(seasonId, gameSeq, homeOrAway, [order], subOrder)
+            );
+            CREATE INDEX IF NOT EXISTS idx_batterbox_game ON tblBatterBox(seasonId, gameSeq, homeOrAway);
+            CREATE INDEX IF NOT EXISTS idx_batterbox_player ON tblBatterBox(playerId);
+        ";
+
+        using (var cmd = conn.CreateCommand()) { cmd.CommandText = ddl; cmd.ExecuteNonQuery(); }
+        Console.WriteLine("[OK] tblBatterBox created.");
+    }
+
+    /// <summary>
+    /// 建立 tblPitcherBox 資料表
+    /// </summary>
+    /// <param name="conn">
+    /// 資料庫連線
+    /// </param>
+    private static void CreateTblPitcherBox(SqliteConnection conn)
+    {
+        var ddl = @"
+            -- tblPitcherBox
+            CREATE TABLE IF NOT EXISTS tblPitcherBox (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                seasonId TEXT NOT NULL,
+                gameSeq INTEGER NOT NULL,
+                homeOrAway TEXT NOT NULL,
+                [order] INTEGER NOT NULL,
+                playerId TEXT,
+                IPOuts INTEGER, NP INTEGER, BF INTEGER,
+                H INTEGER, HR INTEGER,
+                BB INTEGER, IBB INTEGER, HB INTEGER, SO INTEGER,
+                R INTEGER, ER INTEGER,
+                UNIQUE(seasonId, gameSeq, homeOrAway, [order])
+            );
+            CREATE INDEX IF NOT EXISTS idx_pitcherbox_game ON tblPitcherBox(seasonId, gameSeq, homeOrAway);
+            CREATE INDEX IF NOT EXISTS idx_pitcherbox_player ON tblPitcherBox(playerId);
+        ";
+
+        using (var cmd = conn.CreateCommand()) { cmd.CommandText = ddl; cmd.ExecuteNonQuery(); }
+        Console.WriteLine("[OK] tblPitcherBox created.");
+    }
+
+    private static void CreateTblPA(SqliteConnection conn)
+    {
+        var ddl = @"
+            -- tblPA
+            CREATE TABLE IF NOT EXISTS tblPA (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                seasonId TEXT NOT NULL,
+                gameSeq INTEGER NOT NULL,
+                homeOrAway TEXT NOT NULL,
+                inning INTEGER NOT NULL,
+                paSeq INTEGER NOT NULL,
+                scored INTEGER,
+                batterId TEXT,
+                batterHand TEXT,
+                pitcherId TEXT,
+                pitcherHand TEXT,
+                catcherId TEXT,
+                paRound INTEGER,
+                paOrder INTEGER,
+                isPH INTEGER,
+                awayScores INTEGER,
+                homeScores INTEGER,
+                strikes INTEGER,
+                balls INTEGER,
+                outs INTEGER,
+                bases TEXT,
+                homeWE REAL,
+                RE REAL,
+                result TEXT,
+                RBI INTEGER,
+                locationCode TEXT,
+                trajectory TEXT,
+                hardness TEXT,
+                endAwayScores INTEGER,
+                endHomeScores INTEGER,
+                endOuts INTEGER,
+                endBases TEXT,
+                WPA REAL,
+                RE24 REAL,
+                UNIQUE(seasonId, gameSeq, homeOrAway, inning, paSeq)
+            );
+            CREATE INDEX IF NOT EXISTS idx_pa_game ON tblPA(seasonId, gameSeq);
+            CREATE INDEX IF NOT EXISTS idx_pa_batter ON tblPA(batterId);
+            CREATE INDEX IF NOT EXISTS idx_pa_pitcher ON tblPA(pitcherId);
+        ";
+
+        using (var cmd = conn.CreateCommand()) { cmd.CommandText = ddl; cmd.ExecuteNonQuery(); }
+        Console.WriteLine("[OK] tblPA created.");
+    }
+
+    private static void CreateTblEvent(SqliteConnection conn)
+    {
+        var ddl = @"
+            -- tblEvent
+            CREATE TABLE IF NOT EXISTS tblEvent (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                paID INTEGER NOT NULL,
+                [order] INTEGER NOT NULL,
+                type TEXT,
+                inPlay INTEGER,
+                isStrike INTEGER,
+                isBall INTEGER,
+                pitcherId TEXT,
+                catcherId TEXT,
+                batterId TEXT,
+                pitchCode TEXT,
+                pitchType TEXT,
+                velocity INTEGER,
+                coordX INTEGER,
+                coordY INTEGER,
+                UNIQUE(paID, [order]),
+                FOREIGN KEY (paID) REFERENCES tblPA(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_event_pa ON tblEvent(paID);
+        ";
+
+        using (var cmd = conn.CreateCommand()) { cmd.CommandText = ddl; cmd.ExecuteNonQuery(); }
+        Console.WriteLine("[OK] tblEvent created.");
+    }
+
+    private static void CreateTblRunner(SqliteConnection conn)
+    {
+        var ddl = @"
+            -- tblRunner
+            CREATE TABLE IF NOT EXISTS tblRunner (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                eventID INTEGER NOT NULL,
+                type TEXT,
+                runnerID TEXT,
+                isOut INTEGER,
+                scored INTEGER,
+                isRBI INTEGER,
+                isER INTEGER,
+                ERPitcherID TEXT,
+                FOREIGN KEY (eventID) REFERENCES tblEvent(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_runner_event ON tblRunner(eventID);
+            CREATE INDEX IF NOT EXISTS idx_runner_runner ON tblRunner(runnerID);
+        ";
+
+        using (var cmd = conn.CreateCommand()) { cmd.CommandText = ddl; cmd.ExecuteNonQuery(); }
+        Console.WriteLine("[OK] tblRunner created.");
+    }
+
+    /// <summary>
     /// 建立所有代碼資料表
     /// </summary>
     /// <param name="conn">
@@ -426,7 +555,16 @@ class Program
 
         // 建立 Game Tables
         InsertTblGame(conn, doc, masterData);
-        InsertTblScores(conn, doc, masterData);
+        InsertTblScores(conn, doc);
+
+        // 插入 Stats Tables
+        InsertTblBatterBox(conn, doc);
+        InsertTblPitcherBox(conn, doc);
+
+        // 插入 PA Tables (依序執行,傳遞 ID Map)
+        var paIdMap = InsertTblPA(conn, doc);
+        var eventIdMap = InsertTblEvent(conn, doc, paIdMap);
+        InsertTblRunner(conn, doc, eventIdMap);
 
         // 插入 Code Tables
         InsertCodeTables(conn);
@@ -777,7 +915,7 @@ class Program
     /// <param name="doc">
     /// JSON 文件
     /// </param>
-    private static void InsertTblScores(SqliteConnection conn, JsonDocument doc, MasterData masterData)
+    private static void InsertTblScores(SqliteConnection conn, JsonDocument doc)
     {
         // 使用 LINQ 收集所有得分資料
         var scores = GetGames(doc)
@@ -831,6 +969,675 @@ class Program
         }
 
         Console.WriteLine($"[OK] Inserted {scores.Count} records into tblScores.");
+    }
+
+    /// <summary>
+    /// 插入 tblBatterBox 初始資料
+    /// </summary>
+    /// <param name="conn">
+    /// 資料庫連線
+    /// </param>
+    /// <param name="doc">
+    /// JSON 文件
+    /// </param>
+    private static void InsertTblBatterBox(SqliteConnection conn, JsonDocument doc)
+    {
+        // 收集客隊打者成績資料
+        var awayBatterBoxes = GetGames(doc)
+            .SelectMany(game =>
+            {
+                var seasonId = GetString(game, "seasonId") ?? "";
+                var seq = GetInt(game, "seq");
+                return ParseBatterBox(game, "awayBatterBox", seasonId, seq, "A");
+            })
+            .ToList();
+
+        // 插入客隊打者成績資料
+        InsertTblBatterBox(conn, awayBatterBoxes);
+
+        Console.WriteLine($"[OK] Inserted {awayBatterBoxes.Count} away batter box records into tblBatterBox.");
+
+        // 收集主隊打者成績資料
+        var homeBatterBoxes = GetGames(doc)
+            .SelectMany(game =>
+            {
+                var seasonId = GetString(game, "seasonId") ?? "";
+                var seq = GetInt(game, "seq");
+                return ParseBatterBox(game, "homeBatterBox", seasonId, seq, "H");
+            })
+            .ToList();
+
+        // 插入主隊打者成績資料
+        InsertTblBatterBox(conn, homeBatterBoxes);
+
+        Console.WriteLine($"[OK] Inserted {homeBatterBoxes.Count} home batter box records into tblBatterBox.");
+    }
+
+    /// <summary>
+    /// 插入 tblPitcherBox 初始資料
+    /// </summary>
+    /// <param name="conn">
+    /// 資料庫連線
+    /// </param>
+    /// <param name="doc">
+    /// JSON 文件
+    /// </param>
+    private static void InsertTblPitcherBox(SqliteConnection conn, JsonDocument doc)
+    {
+        // 收集客隊投手成績資料
+        var awayPitcherBoxes = GetGames(doc)
+            .SelectMany(game =>
+            {
+                var seasonId = GetString(game, "seasonId") ?? "";
+                var seq = GetInt(game, "seq");
+                return ParsePitcherBox(game, "awayPitcherBox", seasonId, seq, "A");
+            })
+            .ToList();
+
+        // 插入客隊投手成績資料
+        InsertTblPitcherBox(conn, awayPitcherBoxes);
+
+        Console.WriteLine($"[OK] Inserted {awayPitcherBoxes.Count} away pitcher box records into tblPitcherBox.");
+
+        // 收集主隊投手成績資料
+        var homePitcherBoxes = GetGames(doc)
+            .SelectMany(game =>
+            {
+                var seasonId = GetString(game, "seasonId") ?? "";
+                var seq = GetInt(game, "seq");
+                return ParsePitcherBox(game, "homePitcherBox", seasonId, seq, "H");
+            })
+            .ToList();
+
+        // 插入主隊投手成績資料
+        InsertTblPitcherBox(conn, homePitcherBoxes);
+
+        Console.WriteLine($"[OK] Inserted {homePitcherBoxes.Count} home pitcher box records into tblPitcherBox.");
+    }
+
+    private static void InsertTblPitcherBox(SqliteConnection conn, IEnumerable<PitcherBox> pitcherBoxes)
+    {
+        foreach (var box in pitcherBoxes)
+        {
+            var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+                INSERT OR IGNORE INTO tblPitcherBox(
+                    seasonId, gameSeq, homeOrAway, [order], playerId,
+                    IPOuts, NP, BF, H, HR, BB, IBB, HB, SO, R, ER
+                ) VALUES(
+                    @sid, @gseq, @hoa, @order, @pid,
+                    @IPOuts, @NP, @BF, @H, @HR, @BB, @IBB, @HB, @SO, @R, @ER
+                )";
+
+            cmd.Parameters.AddWithValue("@sid", box.SeasonId);
+            cmd.Parameters.AddWithValue("@gseq", box.GameSeq);
+            cmd.Parameters.AddWithValue("@hoa", box.HomeOrAway);
+            cmd.Parameters.AddWithValue("@order", box.Order);
+            cmd.Parameters.AddWithValue("@pid", box.PlayerId ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@IPOuts", box.IPOuts ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@NP", box.NP ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@BF", box.BF ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@H", box.H ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@HR", box.HR ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@BB", box.BB ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@IBB", box.IBB ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@HB", box.HB ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@SO", box.SO ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@R", box.R ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@ER", box.ER ?? (object)DBNull.Value);
+
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    /// <summary>
+    /// 插入 tblPA 資料，並回傳 paIdMap (paKey -> paID)
+    /// </summary>
+    private static Dictionary<string, int> InsertTblPA(SqliteConnection conn, JsonDocument doc)
+    {
+        var root = doc.RootElement;
+        var seasonId = GetString(root, "seasonId") ?? "";
+        var gameSeq = GetInt(root, "seq");
+
+        // 解析客隊 PA
+        var awayPAList = ParsePA(root, "awayPAList", seasonId, gameSeq, "A");
+        var paIdMap = InsertTblPA(conn, awayPAList);
+
+        // 解析主隊 PA
+        var homePAList = ParsePA(root, "homePAList", seasonId, gameSeq, "H");
+        var homePaIdMap = InsertTblPA(conn, homePAList);
+
+        // 合併兩個 Map
+        foreach (var kv in homePaIdMap)
+            paIdMap[kv.Key] = kv.Value;
+
+        Console.WriteLine($"[OK] tblPA inserted: Away={awayPAList.Count()}, Home={homePAList.Count()}");
+        return paIdMap;
+    }
+
+    private static Dictionary<string, int> InsertTblPA(SqliteConnection conn, IEnumerable<(PA pa, string paKey)> paList)
+    {
+        var paIdMap = new Dictionary<string, int>();
+
+        foreach (var (pa, paKey) in paList)
+        {
+            var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+                INSERT OR IGNORE INTO tblPA(
+                    seasonId, gameSeq, homeOrAway, inning, paSeq, scored,
+                    batterId, batterHand, pitcherId, pitcherHand, catcherId,
+                    paRound, paOrder, isPH,
+                    awayScores, homeScores, strikes, balls, outs, bases,
+                    homeWE, RE, result, RBI,
+                    locationCode, trajectory, hardness,
+                    endAwayScores, endHomeScores, endOuts, endBases,
+                    WPA, RE24
+                ) VALUES(
+                    @sid, @gseq, @hoa, @inning, @paSeq, @scored,
+                    @batterId, @batterHand, @pitcherId, @pitcherHand, @catcherId,
+                    @paRound, @paOrder, @isPH,
+                    @awayScores, @homeScores, @strikes, @balls, @outs, @bases,
+                    @homeWE, @RE, @result, @RBI,
+                    @locationCode, @trajectory, @hardness,
+                    @endAwayScores, @endHomeScores, @endOuts, @endBases,
+                    @WPA, @RE24
+                );
+                SELECT last_insert_rowid();";
+
+            cmd.Parameters.AddWithValue("@sid", pa.SeasonId);
+            cmd.Parameters.AddWithValue("@gseq", pa.GameSeq);
+            cmd.Parameters.AddWithValue("@hoa", pa.HomeOrAway);
+            cmd.Parameters.AddWithValue("@inning", pa.Inning);
+            cmd.Parameters.AddWithValue("@paSeq", pa.PaSeq);
+            cmd.Parameters.AddWithValue("@scored", pa.Scored ? 1 : 0);
+            cmd.Parameters.AddWithValue("@batterId", pa.BatterId ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@batterHand", pa.BatterHand ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@pitcherId", pa.PitcherId ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@pitcherHand", pa.PitcherHand ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@catcherId", pa.CatcherId ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@paRound", pa.PaRound ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@paOrder", pa.PaOrder ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@isPH", pa.IsPH ? 1 : 0);
+            cmd.Parameters.AddWithValue("@awayScores", pa.AwayScores ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@homeScores", pa.HomeScores ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@strikes", pa.Strikes ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@balls", pa.Balls ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@outs", pa.Outs ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@bases", pa.Bases ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@homeWE", pa.HomeWE ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@RE", pa.RE ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@result", pa.Result ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@RBI", pa.RBI ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@locationCode", pa.LocationCode ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@trajectory", pa.Trajectory ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@hardness", pa.Hardness ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@endAwayScores", pa.EndAwayScores ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@endHomeScores", pa.EndHomeScores ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@endOuts", pa.EndOuts ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@endBases", pa.EndBases ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@WPA", pa.WPA ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@RE24", pa.RE24 ?? (object)DBNull.Value);
+
+            var paID = Convert.ToInt32(cmd.ExecuteScalar());
+            paIdMap[paKey] = paID;
+        }
+
+        return paIdMap;
+    }
+
+    /// <summary>
+    /// 插入 tblEvent 資料，並回傳 eventIdMap (eventKey -> eventID)
+    /// </summary>
+    private static Dictionary<string, int> InsertTblEvent(SqliteConnection conn, JsonDocument doc, Dictionary<string, int> paIdMap)
+    {
+        var root = doc.RootElement;
+        var seasonId = GetString(root, "seasonId") ?? "";
+        var gameSeq = GetInt(root, "seq");
+
+        // 解析客隊 Event
+        var awayEventList = ParseEvent(root, "awayPAList", seasonId, gameSeq, "A", paIdMap);
+        var eventIdMap = InsertTblEvent(conn, awayEventList);
+
+        // 解析主隊 Event
+        var homeEventList = ParseEvent(root, "homePAList", seasonId, gameSeq, "H", paIdMap);
+        var homeEventIdMap = InsertTblEvent(conn, homeEventList);
+
+        // 合併兩個 Map
+        foreach (var kv in homeEventIdMap)
+            eventIdMap[kv.Key] = kv.Value;
+
+        Console.WriteLine($"[OK] tblEvent inserted: Away={awayEventList.Count()}, Home={homeEventList.Count()}");
+        return eventIdMap;
+    }
+
+    private static Dictionary<string, int> InsertTblEvent(SqliteConnection conn, IEnumerable<(Event evt, string eventKey)> eventList)
+    {
+        var eventIdMap = new Dictionary<string, int>();
+
+        foreach (var (evt, eventKey) in eventList)
+        {
+            var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+                INSERT OR IGNORE INTO tblEvent(
+                    paID, [order], type, inPlay, isStrike, isBall,
+                    pitcherId, catcherId, batterId,
+                    pitchCode, pitchType, velocity, coordX, coordY
+                ) VALUES(
+                    @paID, @order, @type, @inPlay, @isStrike, @isBall,
+                    @pitcherId, @catcherId, @batterId,
+                    @pitchCode, @pitchType, @velocity, @coordX, @coordY
+                );
+                SELECT last_insert_rowid();";
+
+            cmd.Parameters.AddWithValue("@paID", evt.PaID);
+            cmd.Parameters.AddWithValue("@order", evt.Order);
+            cmd.Parameters.AddWithValue("@type", evt.Type ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@inPlay", evt.InPlay ? 1 : 0);
+            cmd.Parameters.AddWithValue("@isStrike", evt.IsStrike ? 1 : 0);
+            cmd.Parameters.AddWithValue("@isBall", evt.IsBall ? 1 : 0);
+            cmd.Parameters.AddWithValue("@pitcherId", evt.PitcherId ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@catcherId", evt.CatcherId ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@batterId", evt.BatterId ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@pitchCode", evt.PitchCode ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@pitchType", evt.PitchType ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@velocity", evt.Velocity ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@coordX", evt.CoordX ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@coordY", evt.CoordY ?? (object)DBNull.Value);
+
+            var eventID = Convert.ToInt32(cmd.ExecuteScalar());
+            eventIdMap[eventKey] = eventID;
+        }
+
+        return eventIdMap;
+    }
+
+    /// <summary>
+    /// 插入 tblRunner 資料
+    /// </summary>
+    private static void InsertTblRunner(SqliteConnection conn, JsonDocument doc, Dictionary<string, int> eventIdMap)
+    {
+        var root = doc.RootElement;
+        var seasonId = GetString(root, "seasonId") ?? "";
+        var gameSeq = GetInt(root, "seq");
+
+        // 解析客隊 Runner
+        var awayRunnerList = ParseRunner(root, "awayPAList", seasonId, gameSeq, "A", eventIdMap);
+        InsertTblRunner(conn, awayRunnerList);
+
+        // 解析主隊 Runner
+        var homeRunnerList = ParseRunner(root, "homePAList", seasonId, gameSeq, "H", eventIdMap);
+        InsertTblRunner(conn, homeRunnerList);
+
+        Console.WriteLine($"[OK] tblRunner inserted: Away={awayRunnerList.Count()}, Home={homeRunnerList.Count()}");
+    }
+
+    private static void InsertTblRunner(SqliteConnection conn, IEnumerable<Runner> runnerList)
+    {
+        foreach (var runner in runnerList)
+        {
+            var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+                INSERT OR IGNORE INTO tblRunner(
+                    eventID, type, runnerID, isOut, scored, isRBI, isER, ERPitcherID
+                ) VALUES(
+                    @eventID, @type, @runnerID, @isOut, @scored, @isRBI, @isER, @ERPitcherID
+                )";
+
+            cmd.Parameters.AddWithValue("@eventID", runner.EventID);
+            cmd.Parameters.AddWithValue("@type", runner.Type ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@runnerID", runner.RunnerID ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@isOut", runner.IsOut ? 1 : 0);
+            cmd.Parameters.AddWithValue("@scored", runner.Scored ? 1 : 0);
+            cmd.Parameters.AddWithValue("@isRBI", runner.IsRBI ? 1 : 0);
+            cmd.Parameters.AddWithValue("@isER", runner.IsER ? 1 : 0);
+            cmd.Parameters.AddWithValue("@ERPitcherID", runner.ERPitcherID ?? (object)DBNull.Value);
+
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    private static void InsertTblBatterBox(SqliteConnection conn, IEnumerable<BatterBox> BatterBoxes){
+
+         foreach (var box in BatterBoxes)
+        {
+            var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+                INSERT OR IGNORE INTO tblBatterBox(
+                    seasonId, gameSeq, homeOrAway, [order], subOrder, playerId,
+                    PA, AB, R, H, RBI, [2B], [3B], HR,
+                    GIDP, DP, TP, BB, IBB, HBP, SO, SH, SF, E, SB, CS
+                ) VALUES(
+                    @sid, @gseq, @hoa, @order, @subOrder, @pid,
+                    @PA, @AB, @R, @H, @RBI, @TwoB, @ThreeB, @HR,
+                    @GIDP, @DP, @TP, @BB, @IBB, @HBP, @SO, @SH, @SF, @E, @SB, @CS
+                )";
+
+            cmd.Parameters.AddWithValue("@sid", box.SeasonId);
+            cmd.Parameters.AddWithValue("@gseq", box.GameSeq);
+            cmd.Parameters.AddWithValue("@hoa", box.HomeOrAway);
+            cmd.Parameters.AddWithValue("@order", box.Order);
+            cmd.Parameters.AddWithValue("@subOrder", box.SubOrder);
+            cmd.Parameters.AddWithValue("@pid", box.PlayerId ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@PA", box.PA ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@AB", box.AB ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@R", box.R ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@H", box.H ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@RBI", box.RBI ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@TwoB", box.TwoB ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@ThreeB", box.ThreeB ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@HR", box.HR ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@GIDP", box.GIDP ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@DP", box.DP ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@TP", box.TP ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@BB", box.BB ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@IBB", box.IBB ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@HBP", box.HBP ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@SO", box.SO ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@SH", box.SH ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@SF", box.SF ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@E", box.E ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@SB", box.SB ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@CS", box.CS ?? (object)DBNull.Value);
+
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    /// <summary>
+    /// 解析 PA 資料
+    /// </summary>
+    private static IEnumerable<(PA pa, string paKey)> ParsePA(JsonElement root, string listName, string seasonId, int gameSeq, string homeOrAway)
+    {
+        if (!root.TryGetProperty(listName, out var paListElement) || paListElement.ValueKind != JsonValueKind.Array)
+            return Enumerable.Empty<(PA, string)>();
+
+        var paList = new List<(PA, string)>();
+        int paSeq = 0;
+
+        foreach (var paElement in paListElement.EnumerateArray())
+        {
+            paSeq++;
+            var inning = GetInt(paElement, "inning");
+
+            // 建立 paKey 用於 eventIdMap
+            var paKey = $"{seasonId}-{gameSeq}-{homeOrAway}-{inning}-{paSeq}";
+
+            var pa = new PA
+            {
+                SeasonId = seasonId,
+                GameSeq = gameSeq,
+                HomeOrAway = homeOrAway,
+                Inning = inning,
+                PaSeq = paSeq,
+                Scored = GetBool(paElement, "scored"),
+                BatterId = GetString(paElement, "batterName"), // JSON 只有 name
+                BatterHand = GetString(paElement, "batterHand"),
+                PitcherId = GetString(paElement, "pitcherName"),
+                PitcherHand = GetString(paElement, "pitcherHand"),
+                CatcherId = GetString(paElement, "catcherName"),
+                PaRound = GetIntNullable(paElement, "paRound"),
+                PaOrder = GetIntNullable(paElement, "paOrder"),
+                IsPH = GetBool(paElement, "isPH"),
+                AwayScores = GetIntNullable(paElement, "awayScores"),
+                HomeScores = GetIntNullable(paElement, "homeScores"),
+                Strikes = GetIntNullable(paElement, "strikes"),
+                Balls = GetIntNullable(paElement, "balls"),
+                Outs = GetIntNullable(paElement, "outs"),
+                Bases = GetString(paElement, "bases"),
+                HomeWE = GetDecimal(paElement, "homeWE"),
+                RE = GetDecimal(paElement, "RE"),
+                Result = GetString(paElement, "result"),
+                RBI = GetIntNullable(paElement, "RBI"),
+                LocationCode = GetString(paElement, "locationCode"),
+                Trajectory = GetString(paElement, "trajectory"),
+                Hardness = GetString(paElement, "hardness"),
+                EndAwayScores = GetIntNullable(paElement, "endAwayScores"),
+                EndHomeScores = GetIntNullable(paElement, "endHomeScores"),
+                EndOuts = GetIntNullable(paElement, "endOuts"),
+                EndBases = GetString(paElement, "endBases"),
+                WPA = GetDecimal(paElement, "WPA"),
+                RE24 = GetDecimal(paElement, "RE24")
+            };
+
+            paList.Add((pa, paKey));
+        }
+
+        return paList;
+    }
+
+    /// <summary>
+    /// 解析 Event 資料
+    /// </summary>
+    private static IEnumerable<(Event evt, string eventKey)> ParseEvent(JsonElement root, string listName, string seasonId, int gameSeq, string homeOrAway, Dictionary<string, int> paIdMap)
+    {
+        if (!root.TryGetProperty(listName, out var paListElement) || paListElement.ValueKind != JsonValueKind.Array)
+            return Enumerable.Empty<(Event, string)>();
+
+        var eventList = new List<(Event, string)>();
+        int paSeq = 0;
+
+        foreach (var paElement in paListElement.EnumerateArray())
+        {
+            paSeq++;
+            var inning = GetInt(paElement, "inning");
+            var paKey = $"{seasonId}-{gameSeq}-{homeOrAway}-{inning}-{paSeq}";
+
+            if (!paIdMap.TryGetValue(paKey, out var paID))
+                continue; // 找不到對應的 PA
+
+            if (!paElement.TryGetProperty("events", out var eventsElement) || eventsElement.ValueKind != JsonValueKind.Array)
+                continue;
+
+            int eventOrder = 0;
+            foreach (var eventElement in eventsElement.EnumerateArray())
+            {
+                eventOrder++;
+                var eventKey = $"{paKey}-{eventOrder}";
+
+                // 解析 velocity (可能是字串或數字)
+                int? velocity = null;
+                if (eventElement.TryGetProperty("velocity", out var velElement))
+                {
+                    if (velElement.ValueKind == JsonValueKind.Number)
+                        velocity = velElement.GetInt32();
+                    else if (velElement.ValueKind == JsonValueKind.String)
+                    {
+                        var velStr = velElement.GetString();
+                        if (!string.IsNullOrEmpty(velStr) && int.TryParse(velStr, out var velValue))
+                            velocity = velValue;
+                    }
+                }
+
+                // 解析 coordX, coordY (可能是字串)
+                int? coordX = null;
+                if (eventElement.TryGetProperty("coordX", out var xElement) && xElement.ValueKind == JsonValueKind.String)
+                {
+                    var xStr = xElement.GetString();
+                    if (!string.IsNullOrEmpty(xStr) && int.TryParse(xStr, out var xValue))
+                        coordX = xValue;
+                }
+
+                int? coordY = null;
+                if (eventElement.TryGetProperty("coordY", out var yElement) && yElement.ValueKind == JsonValueKind.String)
+                {
+                    var yStr = yElement.GetString();
+                    if (!string.IsNullOrEmpty(yStr) && int.TryParse(yStr, out var yValue))
+                        coordY = yValue;
+                }
+
+                var evt = new Event
+                {
+                    PaID = paID,
+                    Order = eventOrder,
+                    Type = GetString(eventElement, "type"),
+                    InPlay = GetBool(eventElement, "inPlay"),
+                    IsStrike = GetBool(eventElement, "isStrike"),
+                    IsBall = GetBool(eventElement, "isBall"),
+                    PitcherId = GetString(eventElement, "pitcherName"),
+                    CatcherId = GetString(eventElement, "catcherName"),
+                    BatterId = GetString(eventElement, "batterName"),
+                    PitchCode = GetString(eventElement, "pitchCode"),
+                    PitchType = GetString(eventElement, "pitchType"),
+                    Velocity = velocity,
+                    CoordX = coordX,
+                    CoordY = coordY
+                };
+
+                eventList.Add((evt, eventKey));
+            }
+        }
+
+        return eventList;
+    }
+
+    /// <summary>
+    /// 解析 Runner 資料
+    /// </summary>
+    private static IEnumerable<Runner> ParseRunner(JsonElement root, string listName, string seasonId, int gameSeq, string homeOrAway, Dictionary<string, int> eventIdMap)
+    {
+        if (!root.TryGetProperty(listName, out var paListElement) || paListElement.ValueKind != JsonValueKind.Array)
+            return Enumerable.Empty<Runner>();
+
+        var runnerList = new List<Runner>();
+        int paSeq = 0;
+
+        foreach (var paElement in paListElement.EnumerateArray())
+        {
+            paSeq++;
+            var inning = GetInt(paElement, "inning");
+            var paKey = $"{seasonId}-{gameSeq}-{homeOrAway}-{inning}-{paSeq}";
+
+            if (!paElement.TryGetProperty("events", out var eventsElement) || eventsElement.ValueKind != JsonValueKind.Array)
+                continue;
+
+            int eventOrder = 0;
+            foreach (var eventElement in eventsElement.EnumerateArray())
+            {
+                eventOrder++;
+                var eventKey = $"{paKey}-{eventOrder}";
+
+                if (!eventIdMap.TryGetValue(eventKey, out var eventID))
+                    continue; // 找不到對應的 Event
+
+                if (!eventElement.TryGetProperty("runners", out var runnersElement) || runnersElement.ValueKind != JsonValueKind.Array)
+                    continue;
+
+                foreach (var runnerElement in runnersElement.EnumerateArray())
+                {
+                    var runner = new Runner
+                    {
+                        EventID = eventID,
+                        Type = GetString(runnerElement, "type"),
+                        RunnerID = GetString(runnerElement, "runnerName"),
+                        IsOut = GetBool(runnerElement, "isOut"),
+                        Scored = GetBool(runnerElement, "scored"),
+                        IsRBI = GetBool(runnerElement, "isRBI"),
+                        IsER = GetBool(runnerElement, "isER"),
+                        ERPitcherID = GetString(runnerElement, "ERPitcherName")
+                    };
+
+                    runnerList.Add(runner);
+                }
+            }
+        }
+
+        return runnerList;
+    }
+
+    /// <summary>
+    /// 解析打者成績資料
+    /// </summary>
+    private static IEnumerable<BatterBox> ParseBatterBox(JsonElement game, string boxName, string seasonId, int gameSeq, string homeOrAway)
+    {
+        if (!game.TryGetProperty(boxName, out var boxElement) || boxElement.ValueKind != JsonValueKind.Array)
+            return Enumerable.Empty<BatterBox>();
+
+        // 解析打者成績資料
+        var batterBoxes = new List<BatterBox>();
+        int TempOrder = 0;
+        int subOrder = 0;
+
+        foreach (var bat in boxElement.EnumerateArray())
+        {
+            int order = GetInt(bat, "order");
+
+            // 同隊第二個相同打序即為替補上場
+            subOrder = (order != TempOrder) ? 0 : subOrder + 1;
+            if (order != TempOrder) TempOrder = order;
+
+            var batterBox = new BatterBox
+            {
+                SeasonId = seasonId,
+                GameSeq = gameSeq,
+                HomeOrAway = homeOrAway,
+                Order = order,
+                SubOrder = subOrder,
+                PlayerId = GetString(bat, "playerId"),
+                PA = GetInt(bat, "PA"),
+                AB = GetInt(bat, "AB"),
+                R = GetInt(bat, "R"),
+                H = GetInt(bat, "H"),
+                RBI = GetInt(bat, "RBI"),
+                TwoB = GetInt(bat, "2B"),
+                ThreeB = GetInt(bat, "3B"),
+                HR = GetInt(bat, "HR"),
+                GIDP = GetInt(bat, "GIDP"),
+                DP = GetInt(bat, "DP"),
+                TP = GetInt(bat, "TP"),
+                BB = GetInt(bat, "BB"),
+                IBB = GetInt(bat, "IBB"),
+                HBP = GetInt(bat, "HBP"),
+                SO = GetInt(bat, "SO"),
+                SH = GetInt(bat, "SH"),
+                SF = GetInt(bat, "SF"),
+                E = GetInt(bat, "E"),
+                SB = GetInt(bat, "SB"),
+                CS = GetInt(bat, "CS")
+            };
+
+            batterBoxes.Add(batterBox);
+        }
+
+        return batterBoxes;
+    }
+
+    /// <summary>
+    /// 解析投手成績資料
+    /// </summary>
+    private static IEnumerable<PitcherBox> ParsePitcherBox(JsonElement game, string boxName, string seasonId, int gameSeq, string homeOrAway)
+    {
+        if (!game.TryGetProperty(boxName, out var boxElement) || boxElement.ValueKind != JsonValueKind.Array)
+            return Enumerable.Empty<PitcherBox>();
+
+        // 解析投手成績資料
+        var pitcherBoxes = new List<PitcherBox>();
+
+        foreach (var pit in boxElement.EnumerateArray())
+        {
+            var pitcherBox = new PitcherBox
+            {
+                SeasonId = seasonId,
+                GameSeq = gameSeq,
+                HomeOrAway = homeOrAway,
+                Order = GetInt(pit, "order"),
+                PlayerId = GetString(pit, "playerId"),
+                IPOuts = GetInt(pit, "IPOuts"),
+                NP = GetInt(pit, "NP"),
+                BF = GetInt(pit, "BF"),
+                H = GetInt(pit, "H"),
+                HR = GetInt(pit, "HR"),
+                BB = GetInt(pit, "BB"),
+                IBB = GetInt(pit, "IBB"),
+                HB = GetInt(pit, "HB"),
+                SO = GetInt(pit, "SO"),
+                R = GetInt(pit, "R"),
+                ER = GetInt(pit, "ER")
+            };
+
+            pitcherBoxes.Add(pitcherBox);
+        }
+
+        return pitcherBoxes;
     }
 
     /// <summary>
@@ -1000,6 +1807,73 @@ class Program
             count++;
         }
         Console.WriteLine($"[OK] Inserted {count} records into {tableName}.");
+    }
+
+    private class PA
+    {
+        public string SeasonId { get; set; } = "";
+        public int GameSeq { get; set; }
+        public string HomeOrAway { get; set; } = "";
+        public int Inning { get; set; }
+        public int PaSeq { get; set; }
+        public bool Scored { get; set; }
+        public string? BatterId { get; set; }
+        public string? BatterHand { get; set; }
+        public string? PitcherId { get; set; }
+        public string? PitcherHand { get; set; }
+        public string? CatcherId { get; set; }
+        public int? PaRound { get; set; }
+        public int? PaOrder { get; set; }
+        public bool IsPH { get; set; }
+        public int? AwayScores { get; set; }
+        public int? HomeScores { get; set; }
+        public int? Strikes { get; set; }
+        public int? Balls { get; set; }
+        public int? Outs { get; set; }
+        public string? Bases { get; set; }
+        public decimal? HomeWE { get; set; }
+        public decimal? RE { get; set; }
+        public string? Result { get; set; }
+        public int? RBI { get; set; }
+        public string? LocationCode { get; set; }
+        public string? Trajectory { get; set; }
+        public string? Hardness { get; set; }
+        public int? EndAwayScores { get; set; }
+        public int? EndHomeScores { get; set; }
+        public int? EndOuts { get; set; }
+        public string? EndBases { get; set; }
+        public decimal? WPA { get; set; }
+        public decimal? RE24 { get; set; }
+    }
+
+    private class Event
+    {
+        public int PaID { get; set; }
+        public int Order { get; set; }
+        public string? Type { get; set; }
+        public bool InPlay { get; set; }
+        public bool IsStrike { get; set; }
+        public bool IsBall { get; set; }
+        public string? PitcherId { get; set; }
+        public string? CatcherId { get; set; }
+        public string? BatterId { get; set; }
+        public string? PitchCode { get; set; }
+        public string? PitchType { get; set; }
+        public int? Velocity { get; set; }
+        public int? CoordX { get; set; }
+        public int? CoordY { get; set; }
+    }
+
+    private class Runner
+    {
+        public int EventID { get; set; }
+        public string? Type { get; set; }
+        public string? RunnerID { get; set; }
+        public bool IsOut { get; set; }
+        public bool Scored { get; set; }
+        public bool IsRBI { get; set; }
+        public bool IsER { get; set; }
+        public string? ERPitcherID { get; set; }
     }
     
     private class MasterData
