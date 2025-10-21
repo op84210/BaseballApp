@@ -1,0 +1,22 @@
+namespace BaseballApp.Models;
+
+/// <summary>
+/// 球員資料_投手
+/// </summary>
+public class Pitcher
+{
+    /// <summary>
+    /// 球員ID
+    /// </summary>
+    public string PlayerId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 球員背號
+    /// </summary>
+    public string? PlayerNumber { get; set; }
+
+    /// <summary>
+    /// 球員名稱
+    /// </summary>
+    public string PlayerName { get; set; } = string.Empty;
+}
