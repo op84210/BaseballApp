@@ -1186,8 +1186,32 @@ class Program
             cmd.Parameters.AddWithValue("@WPA", pa.WPA ?? (object)DBNull.Value);
             cmd.Parameters.AddWithValue("@RE24", pa.RE24 ?? (object)DBNull.Value);
 
-            var paID = Convert.ToInt32(cmd.ExecuteScalar());
-            paIdMap[paKey] = paID;
+            var result = cmd.ExecuteScalar();
+            var paID = result != null ? Convert.ToInt32(result) : 0;
+            
+            // 只有成功插入（rowid > 0）才加入 map；若為 0 表示 INSERT OR IGNORE 衝突
+            if (paID > 0)
+            {
+                paIdMap[paKey] = paID;
+            }
+            else
+            {
+                // INSERT OR IGNORE 衝突，需查詢已存在的 ID
+                var queryCmd = conn.CreateCommand();
+                queryCmd.CommandText = @"
+                    SELECT id FROM tblPA 
+                    WHERE seasonId=@sid AND gameSeq=@gseq AND homeOrAway=@hoa AND inning=@inning AND paSeq=@paSeq";
+                queryCmd.Parameters.AddWithValue("@sid", pa.SeasonId);
+                queryCmd.Parameters.AddWithValue("@gseq", pa.GameSeq);
+                queryCmd.Parameters.AddWithValue("@hoa", pa.HomeOrAway);
+                queryCmd.Parameters.AddWithValue("@inning", pa.Inning);
+                queryCmd.Parameters.AddWithValue("@paSeq", pa.PaSeq);
+                var existingID = queryCmd.ExecuteScalar();
+                if (existingID != null)
+                {
+                    paIdMap[paKey] = Convert.ToInt32(existingID);
+                }
+            }
         }
 
         return paIdMap;
@@ -1208,14 +1232,14 @@ class Program
 
             // 解析客隊 Event
             var awayEventList = ParseEvent(game, "awayPAList", seasonId, gameSeq, "A", paIdMap, masterData);
-            var eventIdMap = InsertTblEvent(conn, awayEventList);
+            var awayEventIdMap = InsertTblEvent(conn, awayEventList);
 
             // 解析主隊 Event
             var homeEventList = ParseEvent(game, "homePAList", seasonId, gameSeq, "H", paIdMap, masterData);
             var homeEventIdMap = InsertTblEvent(conn, homeEventList);
 
             // 合併到總 Map
-            foreach (var kv in eventIdMap)
+            foreach (var kv in awayEventIdMap)
                 allEventIdMap[kv.Key] = kv.Value;
             foreach (var kv in homeEventIdMap)
                 allEventIdMap[kv.Key] = kv.Value;
@@ -1260,8 +1284,27 @@ class Program
             cmd.Parameters.AddWithValue("@coordX", evt.CoordX ?? (object)DBNull.Value);
             cmd.Parameters.AddWithValue("@coordY", evt.CoordY ?? (object)DBNull.Value);
 
-            var eventID = Convert.ToInt32(cmd.ExecuteScalar());
-            eventIdMap[eventKey] = eventID;
+            var result = cmd.ExecuteScalar();
+            var eventID = result != null ? Convert.ToInt32(result) : 0;
+            
+            // 只有成功插入（rowid > 0）才加入 map
+            if (eventID > 0)
+            {
+                eventIdMap[eventKey] = eventID;
+            }
+            else
+            {
+                // INSERT OR IGNORE 衝突，需查詢已存在的 ID
+                var queryCmd = conn.CreateCommand();
+                queryCmd.CommandText = @"SELECT id FROM tblEvent WHERE paID=@paID AND [order]=@order";
+                queryCmd.Parameters.AddWithValue("@paID", evt.PaId);
+                queryCmd.Parameters.AddWithValue("@order", evt.Order);
+                var existingID = queryCmd.ExecuteScalar();
+                if (existingID != null)
+                {
+                    eventIdMap[eventKey] = Convert.ToInt32(existingID);
+                }
+            }
         }
 
         return eventIdMap;
