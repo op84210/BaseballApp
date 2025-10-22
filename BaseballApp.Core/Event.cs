@@ -66,19 +66,19 @@ public class Event
     public string? PitchType { get; set; }
 
     /// <summary>
-    /// 球速 (NULL 表示無資料)
+    /// 球速 (NULL 表示無資料，允許小數)
     /// </summary>
-    public int? Velocity { get; set; }
+    public decimal? Velocity { get; set; }
 
     /// <summary>
-    /// COORD X (NULL 表示無資料)
+    /// COORD X (NULL 表示無資料，允許正負小數)
     /// </summary>
-    public int? CoordX { get; set; }
+    public decimal? CoordX { get; set; }
 
     /// <summary>
-    /// COORD Y (NULL 表示無資料)
+    /// COORD Y (NULL 表示無資料，允許正負小數)
     /// </summary>
-    public int? CoordY { get; set; }
+    public decimal? CoordY { get; set; }
 
     // Navigation properties
     public PA? PA { get; set; }

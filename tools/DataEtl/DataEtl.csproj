@@ -12,7 +12,7 @@
   </ItemGroup>
 
   <ItemGroup>
-     <ProjectReference Include="..\..\..\BaseballApp.Core\BaseballApp.Core.csproj" />
+     <ProjectReference Include="..\..\BaseballApp.Core\BaseballApp.Core.csproj" />
   </ItemGroup>
 
 </Project>

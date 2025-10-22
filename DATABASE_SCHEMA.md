@@ -201,7 +201,7 @@
 | strikes | Int | | 結束打席前好球數 | |
 | balls | Int | | 結束打席前壞球數 | |
 | outs | Int | | 結束打席前出局數 | |
-| bases | String | | 結束打席前壘包狀況 | |
+| bases | Integer | | 結束打席前壘包狀況 (0~7，位元遮罩：1=一壘, 2=二壘, 4=三壘) | |
 | homeWE | decimal | | 結束打席前主場勝率 | |
 | RE | decimal | | 結束打席前得分期望值 | |
 | result | String | | 打席結果 | |
@@ -212,7 +212,7 @@
 | endAwayScores | Int | | 打席結束後客場分 | |
 | endHomeScores | Int | | 打席結束後主場分 | |
 | endOuts | Int | | 打席結束後出局數 | |
-| endBases | String | | 打席結束後壘包狀況 | |
+| endBases | Integer | | 打席結束後壘包狀況 (0~7，位元遮罩：1=一壘, 2=二壘, 4=三壘) | |
 | WPA | decimal | | 勝率增加 | |
 | RE24 | decimal | | 得分期望值增加 | |
 
@@ -222,11 +222,11 @@
 - `FOREIGN KEY (batterId) REFERENCES tblBatter(playerId)`
 - `FOREIGN KEY (pitcherId) REFERENCES tblPitcher(playerId)`
 - `FOREIGN KEY (catcherId) REFERENCES tblBatter(playerId)`
-- `FOREIGN KEY (bases) REFERENCES tblCodeBases(code)`
+> 註：`tblCodeBases` 提供代碼對應名稱（0~7），未建立外鍵，查詢時可用值對應。
 - `FOREIGN KEY (result) REFERENCES tblCodeResult(code)`
 - `FOREIGN KEY (trajectory) REFERENCES tblCodeTrajectory(code)`
 - `FOREIGN KEY (hardness) REFERENCES tblCodeHardness(code)`
-- `FOREIGN KEY (endBases) REFERENCES tblCodeBases(code)`
+> 註：`tblCodeBases` 提供代碼對應名稱（0~7），未建立外鍵，查詢時可用值對應。
 
 #### tblEvent - 打席內事件
 
@@ -268,7 +268,7 @@
 
 | 欄位名稱 | 型別 | 約束 | 說明 |
 |---------|------|------|------|
-| code | String | PK | 代碼值 |
+| code | Integer | PK | 代碼值（0~7） |
 | name | String | | 代碼名稱 |
 
 #### tblCodePitchCode - 投球結果代碼

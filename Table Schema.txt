@@ -129,7 +129,7 @@ homeScores	    Int			        結束打席前主場分
 strikes		    Int			        結束打席前好球數
 balls		    Int			        結束打席前壞球數
 outs		    Int			        結束打席前出局數
-bases		    String			    結束打席前壘包狀況
+bases		    Int			        結束打席前壘包狀況
 homeWE		    decimal			    結束打席前主場勝率
 RE		        decimal			    結束打席前得分期望值
 result		    String			    打席結果
@@ -140,7 +140,7 @@ hardness	    String			    擊球力道		    非全部擊球結果都有
 endAwayScores	Int			        打席結束後客場分
 endHomeScores	Int			        打席結束後主場分
 endOuts		    Int			        打席結束後出局數
-endBases	    String			    打席結束後壘包狀況
+endBases	    Int			        打席結束後壘包狀況
 WPA		        decimal			    勝率增加
 RE24		    decimal			    得分期望值增加
 UNIQUE(seasonId, gameSeq, homeOrAway, inning, paSeq)
@@ -201,7 +201,7 @@ FOREIGN KEY (type) REFERENCES tblCodeRunnerType(code);
 
 
 tblCodeBases                壘包狀況代碼
-code		String		PK	代碼值
+code		Int		PK	代碼值
 name		String			代碼名稱
 
 

@@ -11,7 +11,7 @@ class Program
     {
         /// 設定預設路徑與參數
         string root = @"c:\Users\kwlin\Desktop\ideas\BaseballApp";
-        var input = $@"{root}\data\CPBL-2024-Challenge-OpenData\CPBL-2024-Challenge-G1.json";
+        var input = $@"{root}\data\CPBL-2024-Challenge-OpenData\CPBL-2024-Challenge-OpenData.json";
         var dbPath = $@"{root}\data\baseball.db";
 
         /// 解析命令列參數
@@ -94,7 +94,7 @@ class Program
                 if (el.ValueKind == JsonValueKind.String)
                 {
                     var str = el.GetString();
-                    if (!string.IsNullOrEmpty(str) && decimal.TryParse(str, out var value))
+                    if (!string.IsNullOrEmpty(str) && decimal.TryParse(str, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var value))
                         return value;
                 }
             }
@@ -396,7 +396,7 @@ class Program
                 strikes INTEGER,
                 balls INTEGER,
                 outs INTEGER,
-                bases TEXT,
+                bases INTEGER,
                 homeWE REAL,
                 RE REAL,
                 result TEXT,
@@ -407,7 +407,7 @@ class Program
                 endAwayScores INTEGER,
                 endHomeScores INTEGER,
                 endOuts INTEGER,
-                endBases TEXT,
+                endBases INTEGER,
                 WPA REAL,
                 RE24 REAL,
                 UNIQUE(seasonId, gameSeq, homeOrAway, inning, paSeq)
@@ -438,9 +438,9 @@ class Program
                 batterId TEXT,
                 pitchCode TEXT,
                 pitchType TEXT,
-                velocity INTEGER,
-                coordX INTEGER,
-                coordY INTEGER,
+                velocity REAL,
+                coordX REAL,
+                coordY REAL,
                 UNIQUE(paID, [order]),
                 FOREIGN KEY (paID) REFERENCES tblPA(id)
             );
@@ -486,7 +486,7 @@ class Program
         var ddl = @"
             -- tblCodeBases - 壘包狀況代碼
             CREATE TABLE IF NOT EXISTS tblCodeBases (
-                code TEXT PRIMARY KEY,
+                code INTEGER PRIMARY KEY,
                 name TEXT NOT NULL
             );
 
@@ -562,9 +562,9 @@ class Program
         InsertTblPitcherBox(conn, doc);
 
         // 插入 PA Tables (依序執行,傳遞 ID Map)
-        var paIdMap = InsertTblPA(conn, doc);
-        var eventIdMap = InsertTblEvent(conn, doc, paIdMap);
-        InsertTblRunner(conn, doc, eventIdMap);
+        var paIdMap = InsertTblPA(conn, doc, masterData);
+        var eventIdMap = InsertTblEvent(conn, doc, paIdMap, masterData);
+        InsertTblRunner(conn, doc, eventIdMap, masterData);
 
         // 插入 Code Tables
         InsertCodeTables(conn);
@@ -1093,26 +1093,34 @@ class Program
     /// <summary>
     /// 插入 tblPA 資料，並回傳 paIdMap (paKey -> paID)
     /// </summary>
-    private static Dictionary<string, int> InsertTblPA(SqliteConnection conn, JsonDocument doc)
+    private static Dictionary<string, int> InsertTblPA(SqliteConnection conn, JsonDocument doc, MasterData masterData )
     {
-        var root = doc.RootElement;
-        var seasonId = GetString(root, "seasonId") ?? "";
-        var gameSeq = GetInt(root, "seq");
+        var allPaIdMap = new Dictionary<string, int>();
+        
+        // 處理所有遊戲
+        foreach (var game in GetGames(doc))
+        {
+            var seasonId = GetString(game, "seasonId") ?? "";
+            var gameSeq = GetInt(game, "seq");
 
-        // 解析客隊 PA
-        var awayPAList = ParsePA(root, "awayPAList", seasonId, gameSeq, "A");
-        var paIdMap = InsertTblPA(conn, awayPAList);
+            // 解析客隊 PA
+            var awayPAList = ParsePA(game, "awayPAList", seasonId, gameSeq, "A", masterData);
+            var paIdMap = InsertTblPA(conn, awayPAList);
 
-        // 解析主隊 PA
-        var homePAList = ParsePA(root, "homePAList", seasonId, gameSeq, "H");
-        var homePaIdMap = InsertTblPA(conn, homePAList);
+            // 解析主隊 PA
+            var homePAList = ParsePA(game, "homePAList", seasonId, gameSeq, "H", masterData);
+            var homePaIdMap = InsertTblPA(conn, homePAList);
 
-        // 合併兩個 Map
-        foreach (var kv in homePaIdMap)
-            paIdMap[kv.Key] = kv.Value;
+            // 合併到總 Map
+            foreach (var kv in paIdMap)
+                allPaIdMap[kv.Key] = kv.Value;
+            foreach (var kv in homePaIdMap)
+                allPaIdMap[kv.Key] = kv.Value;
 
-        Console.WriteLine($"[OK] tblPA inserted: Away={awayPAList.Count()}, Home={homePAList.Count()}");
-        return paIdMap;
+            Console.WriteLine($"[OK] Game {seasonId}-{gameSeq} tblPA inserted: Away={awayPAList.Count()}, Home={homePAList.Count()}");
+        }
+        
+        return allPaIdMap;
     }
 
     private static Dictionary<string, int> InsertTblPA(SqliteConnection conn, IEnumerable<(PA pa, string paKey)> paList)
@@ -1188,26 +1196,34 @@ class Program
     /// <summary>
     /// 插入 tblEvent 資料，並回傳 eventIdMap (eventKey -> eventID)
     /// </summary>
-    private static Dictionary<string, int> InsertTblEvent(SqliteConnection conn, JsonDocument doc, Dictionary<string, int> paIdMap)
+    private static Dictionary<string, int> InsertTblEvent(SqliteConnection conn, JsonDocument doc, Dictionary<string, int> paIdMap, MasterData masterData)
     {
-        var root = doc.RootElement;
-        var seasonId = GetString(root, "seasonId") ?? "";
-        var gameSeq = GetInt(root, "seq");
+        var allEventIdMap = new Dictionary<string, int>();
+        
+        // 處理所有遊戲
+        foreach (var game in GetGames(doc))
+        {
+            var seasonId = GetString(game, "seasonId") ?? "";
+            var gameSeq = GetInt(game, "seq");
 
-        // 解析客隊 Event
-        var awayEventList = ParseEvent(root, "awayPAList", seasonId, gameSeq, "A", paIdMap);
-        var eventIdMap = InsertTblEvent(conn, awayEventList);
+            // 解析客隊 Event
+            var awayEventList = ParseEvent(game, "awayPAList", seasonId, gameSeq, "A", paIdMap, masterData);
+            var eventIdMap = InsertTblEvent(conn, awayEventList);
 
-        // 解析主隊 Event
-        var homeEventList = ParseEvent(root, "homePAList", seasonId, gameSeq, "H", paIdMap);
-        var homeEventIdMap = InsertTblEvent(conn, homeEventList);
+            // 解析主隊 Event
+            var homeEventList = ParseEvent(game, "homePAList", seasonId, gameSeq, "H", paIdMap, masterData);
+            var homeEventIdMap = InsertTblEvent(conn, homeEventList);
 
-        // 合併兩個 Map
-        foreach (var kv in homeEventIdMap)
-            eventIdMap[kv.Key] = kv.Value;
+            // 合併到總 Map
+            foreach (var kv in eventIdMap)
+                allEventIdMap[kv.Key] = kv.Value;
+            foreach (var kv in homeEventIdMap)
+                allEventIdMap[kv.Key] = kv.Value;
 
-        Console.WriteLine($"[OK] tblEvent inserted: Away={awayEventList.Count()}, Home={homeEventList.Count()}");
-        return eventIdMap;
+            Console.WriteLine($"[OK] Game {seasonId}-{gameSeq} tblEvent inserted: Away={awayEventList.Count()}, Home={homeEventList.Count()}");
+        }
+        
+        return allEventIdMap;
     }
 
     private static Dictionary<string, int> InsertTblEvent(SqliteConnection conn, IEnumerable<(Event evt, string eventKey)> eventList)
@@ -1229,7 +1245,7 @@ class Program
                 );
                 SELECT last_insert_rowid();";
 
-            cmd.Parameters.AddWithValue("@paID", evt.PaID);
+            cmd.Parameters.AddWithValue("@paID", evt.PaId);
             cmd.Parameters.AddWithValue("@order", evt.Order);
             cmd.Parameters.AddWithValue("@type", evt.Type ?? (object)DBNull.Value);
             cmd.Parameters.AddWithValue("@inPlay", evt.InPlay ? 1 : 0);
@@ -1254,21 +1270,31 @@ class Program
     /// <summary>
     /// 插入 tblRunner 資料
     /// </summary>
-    private static void InsertTblRunner(SqliteConnection conn, JsonDocument doc, Dictionary<string, int> eventIdMap)
+    private static void InsertTblRunner(SqliteConnection conn, JsonDocument doc, Dictionary<string, int> eventIdMap, MasterData masterData)
     {
-        var root = doc.RootElement;
-        var seasonId = GetString(root, "seasonId") ?? "";
-        var gameSeq = GetInt(root, "seq");
+        int totalAwayRunners = 0, totalHomeRunners = 0;
 
-        // 解析客隊 Runner
-        var awayRunnerList = ParseRunner(root, "awayPAList", seasonId, gameSeq, "A", eventIdMap);
-        InsertTblRunner(conn, awayRunnerList);
+        // 處理所有遊戲
+        foreach (var game in GetGames(doc))
+        {
+            var seasonId = GetString(game, "seasonId") ?? "";
+            var gameSeq = GetInt(game, "seq");
 
-        // 解析主隊 Runner
-        var homeRunnerList = ParseRunner(root, "homePAList", seasonId, gameSeq, "H", eventIdMap);
-        InsertTblRunner(conn, homeRunnerList);
+            // 解析客隊 Runner
+            var awayRunnerList = ParseRunner(game, "awayPAList", seasonId, gameSeq, "A", eventIdMap, masterData);
+            InsertTblRunner(conn, awayRunnerList);
 
-        Console.WriteLine($"[OK] tblRunner inserted: Away={awayRunnerList.Count()}, Home={homeRunnerList.Count()}");
+            // 解析主隊 Runner
+            var homeRunnerList = ParseRunner(game, "homePAList", seasonId, gameSeq, "H", eventIdMap, masterData);
+            InsertTblRunner(conn, homeRunnerList);
+
+            totalAwayRunners += awayRunnerList.Count();
+            totalHomeRunners += homeRunnerList.Count();
+
+            Console.WriteLine($"[OK] Game {seasonId}-{gameSeq} tblRunner inserted: Away={awayRunnerList.Count()}, Home={homeRunnerList.Count()}");
+        }
+        
+        Console.WriteLine($"[OK] Total tblRunner inserted: Away={totalAwayRunners}, Home={totalHomeRunners}");
     }
 
     private static void InsertTblRunner(SqliteConnection conn, IEnumerable<Runner> runnerList)
@@ -1283,14 +1309,14 @@ class Program
                     @eventID, @type, @runnerID, @isOut, @scored, @isRBI, @isER, @ERPitcherID
                 )";
 
-            cmd.Parameters.AddWithValue("@eventID", runner.EventID);
+            cmd.Parameters.AddWithValue("@eventID", runner.EventId);
             cmd.Parameters.AddWithValue("@type", runner.Type ?? (object)DBNull.Value);
-            cmd.Parameters.AddWithValue("@runnerID", runner.RunnerID ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@runnerID", runner.RunnerId ?? (object)DBNull.Value);
             cmd.Parameters.AddWithValue("@isOut", runner.IsOut ? 1 : 0);
             cmd.Parameters.AddWithValue("@scored", runner.Scored ? 1 : 0);
             cmd.Parameters.AddWithValue("@isRBI", runner.IsRBI ? 1 : 0);
             cmd.Parameters.AddWithValue("@isER", runner.IsER ? 1 : 0);
-            cmd.Parameters.AddWithValue("@ERPitcherID", runner.ERPitcherID ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@ERPitcherID", runner.ERPitcherId ?? (object)DBNull.Value);
 
             cmd.ExecuteNonQuery();
         }
@@ -1346,7 +1372,7 @@ class Program
     /// <summary>
     /// 解析 PA 資料
     /// </summary>
-    private static IEnumerable<(PA pa, string paKey)> ParsePA(JsonElement root, string listName, string seasonId, int gameSeq, string homeOrAway)
+    private static IEnumerable<(PA pa, string paKey)> ParsePA(JsonElement root, string listName, string seasonId, int gameSeq, string homeOrAway, MasterData masterData)
     {
         if (!root.TryGetProperty(listName, out var paListElement) || paListElement.ValueKind != JsonValueKind.Array)
             return Enumerable.Empty<(PA, string)>();
@@ -1362,6 +1388,14 @@ class Program
             // 建立 paKey 用於 eventIdMap
             var paKey = $"{seasonId}-{gameSeq}-{homeOrAway}-{inning}-{paSeq}";
 
+            // 解析 batterId, pitcherId, catcherId
+            var batterName = GetString(paElement, "batterName");
+            var batterId = batterName != null ? masterData.GetPlayerIdByName(batterName) : null;
+            var pitcherName = GetString(paElement, "pitcherName");
+            var pitcherId = pitcherName != null ? masterData.GetPlayerIdByName(pitcherName) : null;
+            var catcherName = GetString(paElement, "catcherName");
+            var catcherId = catcherName != null ? masterData.GetPlayerIdByName(catcherName) : null;
+
             var pa = new PA
             {
                 SeasonId = seasonId,
@@ -1370,11 +1404,11 @@ class Program
                 Inning = inning,
                 PaSeq = paSeq,
                 Scored = GetBool(paElement, "scored"),
-                BatterId = GetString(paElement, "batterName"), // JSON 只有 name
+                BatterId = batterId,
                 BatterHand = GetString(paElement, "batterHand"),
-                PitcherId = GetString(paElement, "pitcherName"),
+                PitcherId = pitcherId,
                 PitcherHand = GetString(paElement, "pitcherHand"),
-                CatcherId = GetString(paElement, "catcherName"),
+                CatcherId = catcherId,
                 PaRound = GetIntNullable(paElement, "paRound"),
                 PaOrder = GetIntNullable(paElement, "paOrder"),
                 IsPH = GetBool(paElement, "isPH"),
@@ -1383,7 +1417,7 @@ class Program
                 Strikes = GetIntNullable(paElement, "strikes"),
                 Balls = GetIntNullable(paElement, "balls"),
                 Outs = GetIntNullable(paElement, "outs"),
-                Bases = GetString(paElement, "bases"),
+                Bases = GetIntNullable(paElement, "bases"),
                 HomeWE = GetDecimal(paElement, "homeWE"),
                 RE = GetDecimal(paElement, "RE"),
                 Result = GetString(paElement, "result"),
@@ -1394,7 +1428,7 @@ class Program
                 EndAwayScores = GetIntNullable(paElement, "endAwayScores"),
                 EndHomeScores = GetIntNullable(paElement, "endHomeScores"),
                 EndOuts = GetIntNullable(paElement, "endOuts"),
-                EndBases = GetString(paElement, "endBases"),
+                EndBases = GetIntNullable(paElement, "endBases"),
                 WPA = GetDecimal(paElement, "WPA"),
                 RE24 = GetDecimal(paElement, "RE24")
             };
@@ -1408,7 +1442,7 @@ class Program
     /// <summary>
     /// 解析 Event 資料
     /// </summary>
-    private static IEnumerable<(Event evt, string eventKey)> ParseEvent(JsonElement root, string listName, string seasonId, int gameSeq, string homeOrAway, Dictionary<string, int> paIdMap)
+    private static IEnumerable<(Event evt, string eventKey)> ParseEvent(JsonElement root, string listName, string seasonId, int gameSeq, string homeOrAway, Dictionary<string, int> paIdMap, MasterData masterData)
     {
         if (!root.TryGetProperty(listName, out var paListElement) || paListElement.ValueKind != JsonValueKind.Array)
             return Enumerable.Empty<(Event, string)>();
@@ -1434,48 +1468,30 @@ class Program
                 eventOrder++;
                 var eventKey = $"{paKey}-{eventOrder}";
 
-                // 解析 velocity (可能是字串或數字)
-                int? velocity = null;
-                if (eventElement.TryGetProperty("velocity", out var velElement))
-                {
-                    if (velElement.ValueKind == JsonValueKind.Number)
-                        velocity = velElement.GetInt32();
-                    else if (velElement.ValueKind == JsonValueKind.String)
-                    {
-                        var velStr = velElement.GetString();
-                        if (!string.IsNullOrEmpty(velStr) && int.TryParse(velStr, out var velValue))
-                            velocity = velValue;
-                    }
-                }
+                // 解析 velocity, coordX, coordY (支援數字或字串，允許正負小數)
+                var velocity = GetDecimal(eventElement, "velocity");
+                var coordX = GetDecimal(eventElement, "coordX");
+                var coordY = GetDecimal(eventElement, "coordY");
 
-                // 解析 coordX, coordY (可能是字串)
-                int? coordX = null;
-                if (eventElement.TryGetProperty("coordX", out var xElement) && xElement.ValueKind == JsonValueKind.String)
-                {
-                    var xStr = xElement.GetString();
-                    if (!string.IsNullOrEmpty(xStr) && int.TryParse(xStr, out var xValue))
-                        coordX = xValue;
-                }
-
-                int? coordY = null;
-                if (eventElement.TryGetProperty("coordY", out var yElement) && yElement.ValueKind == JsonValueKind.String)
-                {
-                    var yStr = yElement.GetString();
-                    if (!string.IsNullOrEmpty(yStr) && int.TryParse(yStr, out var yValue))
-                        coordY = yValue;
-                }
+                // 解析 pitcherId, catcherId, batterId
+                var pitcherName = GetString(eventElement, "pitcherName");
+                var pitcherId = pitcherName != null ? masterData.GetPlayerIdByName(pitcherName) : null;
+                var catcherName = GetString(eventElement, "catcherName");
+                var catcherId = catcherName != null ? masterData.GetPlayerIdByName(catcherName) : null;
+                var batterName = GetString(eventElement, "batterName");
+                var batterId = batterName != null ? masterData.GetPlayerIdByName(batterName) : null;
 
                 var evt = new Event
                 {
-                    PaID = paID,
+                    PaId = paID,
                     Order = eventOrder,
                     Type = GetString(eventElement, "type"),
                     InPlay = GetBool(eventElement, "inPlay"),
                     IsStrike = GetBool(eventElement, "isStrike"),
                     IsBall = GetBool(eventElement, "isBall"),
-                    PitcherId = GetString(eventElement, "pitcherName"),
-                    CatcherId = GetString(eventElement, "catcherName"),
-                    BatterId = GetString(eventElement, "batterName"),
+                    PitcherId = pitcherId,
+                    CatcherId = catcherId,
+                    BatterId = batterId,
                     PitchCode = GetString(eventElement, "pitchCode"),
                     PitchType = GetString(eventElement, "pitchType"),
                     Velocity = velocity,
@@ -1493,7 +1509,7 @@ class Program
     /// <summary>
     /// 解析 Runner 資料
     /// </summary>
-    private static IEnumerable<Runner> ParseRunner(JsonElement root, string listName, string seasonId, int gameSeq, string homeOrAway, Dictionary<string, int> eventIdMap)
+    private static IEnumerable<Runner> ParseRunner(JsonElement root, string listName, string seasonId, int gameSeq, string homeOrAway, Dictionary<string, int> eventIdMap, MasterData masterData)
     {
         if (!root.TryGetProperty(listName, out var paListElement) || paListElement.ValueKind != JsonValueKind.Array)
             return Enumerable.Empty<Runner>();
@@ -1524,16 +1540,22 @@ class Program
 
                 foreach (var runnerElement in runnersElement.EnumerateArray())
                 {
+                    // 解析 runnerId 和 ERPitcherId
+                    var runnerName = GetString(runnerElement, "runnerName");
+                    var runnerId = runnerName != null ? masterData.GetPlayerIdByName(runnerName) : null;
+                    var ERPitcherName = GetString(runnerElement, "ERPitcherName");
+                    var ERPitcherId = ERPitcherName != null ? masterData.GetPlayerIdByName(ERPitcherName) : null;
+
                     var runner = new Runner
                     {
-                        EventID = eventID,
-                        Type = GetString(runnerElement, "type"),
-                        RunnerID = GetString(runnerElement, "runnerName"),
+                        EventId = eventID,
+                        Type = GetString(runnerElement, "type") ?? "",
+                        RunnerId = runnerId ?? "",
                         IsOut = GetBool(runnerElement, "isOut"),
                         Scored = GetBool(runnerElement, "scored"),
                         IsRBI = GetBool(runnerElement, "isRBI"),
                         IsER = GetBool(runnerElement, "isER"),
-                        ERPitcherID = GetString(runnerElement, "ERPitcherName")
+                        ERPitcherId = ERPitcherId
                     };
 
                     runnerList.Add(runner);
@@ -1674,16 +1696,16 @@ class Program
     private static void InsertCodeTables(SqliteConnection conn)
     {
         // tblCodeBases - 壘包狀況代碼
-        var basesData = new Dictionary<string, string>
+        var basesData = new Dictionary<int, string>
         {
-            { "0", "無人在壘" },
-            { "1", "一壘有人" },
-            { "2", "二壘有人" },
-            { "3", "一二壘有人" },
-            { "4", "三壘有人" },
-            { "5", "一三壘有人" },
-            { "6", "二三壘有人" },
-            { "7", "滿壘" }
+            { 0, "無人在壘" },
+            { 1, "一壘有人" },
+            { 2, "二壘有人" },
+            { 3, "一二壘有人" },
+            { 4, "三壘有人" },
+            { 5, "一三壘有人" },
+            { 6, "二三壘有人" },
+            { 7, "滿壘" }
         };
         InsertCodeTable(conn, "tblCodeBases", basesData);
 
@@ -1809,73 +1831,22 @@ class Program
         Console.WriteLine($"[OK] Inserted {count} records into {tableName}.");
     }
 
-    private class PA
+    // Overload for integer code tables (e.g., tblCodeBases)
+    private static void InsertCodeTable(SqliteConnection conn, string tableName, Dictionary<int, string> data)
     {
-        public string SeasonId { get; set; } = "";
-        public int GameSeq { get; set; }
-        public string HomeOrAway { get; set; } = "";
-        public int Inning { get; set; }
-        public int PaSeq { get; set; }
-        public bool Scored { get; set; }
-        public string? BatterId { get; set; }
-        public string? BatterHand { get; set; }
-        public string? PitcherId { get; set; }
-        public string? PitcherHand { get; set; }
-        public string? CatcherId { get; set; }
-        public int? PaRound { get; set; }
-        public int? PaOrder { get; set; }
-        public bool IsPH { get; set; }
-        public int? AwayScores { get; set; }
-        public int? HomeScores { get; set; }
-        public int? Strikes { get; set; }
-        public int? Balls { get; set; }
-        public int? Outs { get; set; }
-        public string? Bases { get; set; }
-        public decimal? HomeWE { get; set; }
-        public decimal? RE { get; set; }
-        public string? Result { get; set; }
-        public int? RBI { get; set; }
-        public string? LocationCode { get; set; }
-        public string? Trajectory { get; set; }
-        public string? Hardness { get; set; }
-        public int? EndAwayScores { get; set; }
-        public int? EndHomeScores { get; set; }
-        public int? EndOuts { get; set; }
-        public string? EndBases { get; set; }
-        public decimal? WPA { get; set; }
-        public decimal? RE24 { get; set; }
+        int count = 0;
+        foreach (var item in data)
+        {
+            var cmd = conn.CreateCommand();
+            cmd.CommandText = $"INSERT OR IGNORE INTO {tableName}(code, name) VALUES(@code, @name)";
+            cmd.Parameters.AddWithValue("@code", item.Key);
+            cmd.Parameters.AddWithValue("@name", item.Value);
+            cmd.ExecuteNonQuery();
+            count++;
+        }
+        Console.WriteLine($"[OK] Inserted {count} records into {tableName}.");
     }
 
-    private class Event
-    {
-        public int PaID { get; set; }
-        public int Order { get; set; }
-        public string? Type { get; set; }
-        public bool InPlay { get; set; }
-        public bool IsStrike { get; set; }
-        public bool IsBall { get; set; }
-        public string? PitcherId { get; set; }
-        public string? CatcherId { get; set; }
-        public string? BatterId { get; set; }
-        public string? PitchCode { get; set; }
-        public string? PitchType { get; set; }
-        public int? Velocity { get; set; }
-        public int? CoordX { get; set; }
-        public int? CoordY { get; set; }
-    }
-
-    private class Runner
-    {
-        public int EventID { get; set; }
-        public string? Type { get; set; }
-        public string? RunnerID { get; set; }
-        public bool IsOut { get; set; }
-        public bool Scored { get; set; }
-        public bool IsRBI { get; set; }
-        public bool IsER { get; set; }
-        public string? ERPitcherID { get; set; }
-    }
-    
     private class MasterData
     {
         public List<Stadium>? InsertedStadiums { get; set; } 
@@ -1883,5 +1854,18 @@ class Program
         public List<Team>? InsertedTeams { get; set; } 
         public List<Batter>? InsertedBatters { get; set; } 
         public List<Pitcher>? InsertedPitchers { get; set; }
+
+        public string? GetPlayerIdByName(string playerName)
+        {
+            var batter = InsertedBatters?.FirstOrDefault(b => b.PlayerName == playerName);
+            if (batter != null)
+                return batter.PlayerId;
+
+            var pitcher = InsertedPitchers?.FirstOrDefault(p => p.PlayerName == playerName);
+            if (pitcher != null)
+                return pitcher.PlayerId;
+
+            return null;
+        }
     }
 }

@@ -106,9 +106,9 @@ public class PA
     public int? Outs { get; set; }
 
     /// <summary>
-    /// 結束打席前壘包狀況
+    /// 結束打席前壘包狀況 (0~7 位元遮罩: 1=一壘,2=二壘,4=三壘)
     /// </summary>
-    public string? Bases { get; set; }
+    public int? Bases { get; set; }
 
     /// <summary>
     /// 結束打席前主場勝率
@@ -161,9 +161,9 @@ public class PA
     public int? EndOuts { get; set; }
 
     /// <summary>
-    /// 打席結束後壘包狀況
+    /// 打席結束後壘包狀況 (0~7 位元遮罩: 1=一壘,2=二壘,4=三壘)
     /// </summary>
-    public string? EndBases { get; set; }
+    public int? EndBases { get; set; }
 
     /// <summary>
     /// 勝率增加
