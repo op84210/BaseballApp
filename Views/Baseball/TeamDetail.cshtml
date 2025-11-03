@@ -1,0 +1,90 @@
+@{
+    ViewData["Title"] = ViewBag.Team.TeamName;
+}
+
+<div class="container mt-4">
+    <div class="mb-4">
+        <a href="@Url.Action("Teams", new { seasonId = ViewBag.SeasonId })" class="btn btn-secondary">← 返回球隊列表</a>
+    </div>
+
+    <h1 class="mb-4">@ViewBag.Team.TeamName</h1>
+    <p class="text-muted">賽季: @ViewBag.SeasonId</p>
+
+    <!-- 打者成績 -->
+    <h2 class="mt-4 mb-3">⚾ 打者成績</h2>
+    <div class="table-responsive">
+        <table class="table table-striped table-hover">
+            <thead class="table-dark">
+                <tr>
+                    <th>背號</th>
+                    <th>球員</th>
+                    <th>場次</th>
+                    <th>打席</th>
+                    <th>打數</th>
+                    <th>安打</th>
+                    <th>全壘打</th>
+                    <th>打點</th>
+                    <th>打擊率</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var batter in ViewBag.TeamBatters)
+                {
+                    <tr>
+                        <td>@batter.PlayerNumber</td>
+                        <td>
+                            <a href="@Url.Action("PlayerDetail", new { playerId = batter.PlayerId, seasonId = ViewBag.SeasonId })">
+                                @batter.PlayerName
+                            </a>
+                        </td>
+                        <td>@batter.Games</td>
+                        <td>@batter.PA</td>
+                        <td>@batter.AB</td>
+                        <td>@batter.H</td>
+                        <td>@batter.HR</td>
+                        <td>@batter.RBI</td>
+                        <td>@batter.AVG.ToString("F3")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <!-- 投手成績 -->
+    <h2 class="mt-5 mb-3">🥎 投手成績</h2>
+    <div class="table-responsive">
+        <table class="table table-striped table-hover">
+            <thead class="table-dark">
+                <tr>
+                    <th>背號</th>
+                    <th>球員</th>
+                    <th>場次</th>
+                    <th>局數</th>
+                    <th>被安打</th>
+                    <th>被全壘打</th>
+                    <th>四壞球</th>
+                    <th>三振</th>
+                    <th>自責分</th>
+                    <th>防禦率</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var pitcher in ViewBag.TeamPitchers)
+                {
+                    <tr>
+                        <td>@pitcher.PlayerNumber</td>
+                        <td>@pitcher.PlayerName</td>
+                        <td>@pitcher.Games</td>
+                        <td>@pitcher.IP.ToString("F1")</td>
+                        <td>@pitcher.H</td>
+                        <td>@pitcher.HR</td>
+                        <td>@pitcher.BB</td>
+                        <td>@pitcher.SO</td>
+                        <td>@pitcher.ER</td>
+                        <td>@pitcher.ERA.ToString("F2")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

@@ -1,0 +1,119 @@
+@{
+    ViewData["Title"] = "球員詳情";
+}
+
+<div class="container mt-4">
+    <div class="mb-3">
+        <a href="@Url.Action("Players", new { seasonId = ViewBag.SeasonId })" class="btn btn-secondary">← 返回球員列表</a>
+    </div>
+
+    <!-- 球員基本資訊 -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <h2>
+                @if (!string.IsNullOrEmpty(ViewBag.Player.PlayerNumber))
+                {
+                    <span class="badge bg-secondary">@ViewBag.Player.PlayerNumber</span>
+                }
+                @ViewBag.Player.PlayerName
+            </h2>
+            <p class="text-muted">球員編號: @ViewBag.Player.PlayerId</p>
+        </div>
+    </div>
+
+    <!-- 統計數據 -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3 class="card-title">@ViewBag.Stats.TotalPAs</h3>
+                    <p class="card-text text-muted">總打席數</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3 class="card-title">@ViewBag.Stats.HomeRuns</h3>
+                    <p class="card-text text-muted">全壘打</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 逐場表現 -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h4>逐場表現</h4>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>日期</th>
+                            <th>場次</th>
+                            <th>打席</th>
+                            <th>安打</th>
+                            <th>全壘打</th>
+                            <th>打點</th>
+                            <th>三振</th>
+                            <th>保送</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var game in ViewBag.Stats.GameStats)
+                        {
+                            <tr>
+                                <td>@game.Date</td>
+                                <td>G@(game.Seq)</td>
+                                <td>@game.PA</td>
+                                <td>@game.H</td>
+                                <td>@game.HR</td>
+                                <td>@game.RBI</td>
+                                <td>@game.SO</td>
+                                <td>@game.BB</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 最佳打席 (依WPA排序) -->
+    <div class="card">
+        <div class="card-header">
+            <h4>最佳打席 (依WPA排序)</h4>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>日期</th>
+                            <th>場次</th>
+                            <th>局數</th>
+                            <th>打席</th>
+                            <th>結果</th>
+                            <th>WPA</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var pa in ViewBag.Stats.BestPAs)
+                        {
+                            <tr>
+                                <td>@pa.Date</td>
+                                <td>G@(pa.Seq)</td>
+                                <td>@pa.Inning</td>
+                                <td>@pa.PASeq</td>
+                                <td>@pa.PAResult</td>
+                                <td>@pa.WPA?.ToString("F3")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

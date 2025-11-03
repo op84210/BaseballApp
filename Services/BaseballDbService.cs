@@ -1,6 +1,6 @@
+using BaseballApp.Data;
 using BaseballApp.Models;
-using Microsoft.Data.Sqlite;
-using System.Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace BaseballApp.Services;
 
@@ -24,330 +24,136 @@ public interface IBaseballDbService
 
 public class BaseballDbService : IBaseballDbService
 {
-    private readonly string _connectionString;
+    private readonly BaseballDbContext _context;
     private readonly ILogger<BaseballDbService> _logger;
 
-    public BaseballDbService(IConfiguration configuration, ILogger<BaseballDbService> logger)
+    public BaseballDbService(BaseballDbContext context, ILogger<BaseballDbService> logger)
     {
-        var dbPath = configuration.GetValue<string>("DatabasePath") 
-                     ?? Path.Combine(Directory.GetCurrentDirectory(), "data", "baseball.db");
-        _connectionString = $"Data Source={dbPath}";
+        _context = context;
         _logger = logger;
     }
 
     public async Task<IEnumerable<Game>> GetGamesAsync(string? seasonId = null)
     {
-        var games = new List<Game>();
-
         try
         {
-            using var connection = new SqliteConnection(_connectionString);
-            await connection.OpenAsync();
+            var query = _context.Games.AsQueryable();
 
-            var sql = "SELECT seasonId, seq, date, stadiumId, awayTeamId, homeTeamId FROM tblGame";
             if (!string.IsNullOrEmpty(seasonId))
             {
-                sql += " WHERE seasonId = @seasonId";
-            }
-            sql += " ORDER BY date, seq";
-
-            using var command = new SqliteCommand(sql, connection);
-            if (!string.IsNullOrEmpty(seasonId))
-            {
-                command.Parameters.AddWithValue("@seasonId", seasonId);
+                query = query.Where(g => g.SeasonId == seasonId);
             }
 
-            using var reader = await command.ExecuteReaderAsync();
-            while (await reader.ReadAsync())
-            {
-                games.Add(new Game
-                {
-                    SeasonId = reader.GetString(0),
-                    Seq = reader.GetInt32(1),
-                    Date = DateTime.Parse(reader.GetString(2)),
-                    StadiumId = reader.IsDBNull(3) ? null : reader.GetInt32(3),
-                    AwayTeamId = reader.IsDBNull(4) ? null : reader.GetString(4),
-                    HomeTeamId = reader.IsDBNull(5) ? null : reader.GetString(5)
-                });
-            }
+            return await query
+                .OrderBy(g => g.Date)
+                .ThenBy(g => g.Seq)
+                .ToListAsync();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "讀取比賽資料時發生錯誤");
+            _logger.LogError(ex, "讀?��?賽�??��??��??�誤");
+            return Enumerable.Empty<Game>();
         }
-
-        return games;
     }
 
     public async Task<IEnumerable<BatterBox>> GetBatterBoxAsync(string? playerId = null, string? seasonId = null)
     {
-        var batterBoxes = new List<BatterBox>();
-
         try
         {
-            using var connection = new SqliteConnection(_connectionString);
-            await connection.OpenAsync();
-
-            var sql = @"
-                SELECT id, seasonId, gameSeq, homeOrAway, [order], subOrder, playerId,
-                       PA, AB, R, H, RBI, [2B], [3B], HR, GIDP, DP, TP,
-                       BB, IBB, HBP, SO, SH, SF, E, SB, CS
-                FROM tblBatterBox
-                WHERE 1=1";
+            var query = _context.BatterBoxes.AsQueryable();
 
             if (!string.IsNullOrEmpty(playerId))
             {
-                sql += " AND playerId = @playerId";
-            }
-            if (!string.IsNullOrEmpty(seasonId))
-            {
-                sql += " AND seasonId = @seasonId";
+                query = query.Where(bb => bb.PlayerId == playerId);
             }
 
-            using var command = new SqliteCommand(sql, connection);
-            if (!string.IsNullOrEmpty(playerId))
-            {
-                command.Parameters.AddWithValue("@playerId", playerId);
-            }
             if (!string.IsNullOrEmpty(seasonId))
             {
-                command.Parameters.AddWithValue("@seasonId", seasonId);
+                query = query.Where(bb => bb.SeasonId == seasonId);
             }
 
-            using var reader = await command.ExecuteReaderAsync();
-            while (await reader.ReadAsync())
-            {
-                batterBoxes.Add(new BatterBox
-                {
-                    Id = reader.GetInt32(0),
-                    SeasonId = reader.GetString(1),
-                    GameSeq = reader.GetInt32(2),
-                    HomeOrAway = reader.GetString(3),
-                    Order = reader.GetInt32(4),
-                    SubOrder = reader.GetInt32(5),
-                    PlayerId = reader.IsDBNull(6) ? null : reader.GetString(6),
-                    PA = reader.IsDBNull(7) ? null : reader.GetInt32(7),
-                    AB = reader.IsDBNull(8) ? null : reader.GetInt32(8),
-                    R = reader.IsDBNull(9) ? null : reader.GetInt32(9),
-                    H = reader.IsDBNull(10) ? null : reader.GetInt32(10),
-                    RBI = reader.IsDBNull(11) ? null : reader.GetInt32(11),
-                    TwoB = reader.IsDBNull(12) ? null : reader.GetInt32(12),
-                    ThreeB = reader.IsDBNull(13) ? null : reader.GetInt32(13),
-                    HR = reader.IsDBNull(14) ? null : reader.GetInt32(14),
-                    GIDP = reader.IsDBNull(15) ? null : reader.GetInt32(15),
-                    DP = reader.IsDBNull(16) ? null : reader.GetInt32(16),
-                    TP = reader.IsDBNull(17) ? null : reader.GetInt32(17),
-                    BB = reader.IsDBNull(18) ? null : reader.GetInt32(18),
-                    IBB = reader.IsDBNull(19) ? null : reader.GetInt32(19),
-                    HBP = reader.IsDBNull(20) ? null : reader.GetInt32(20),
-                    SO = reader.IsDBNull(21) ? null : reader.GetInt32(21),
-                    SH = reader.IsDBNull(22) ? null : reader.GetInt32(22),
-                    SF = reader.IsDBNull(23) ? null : reader.GetInt32(23),
-                    E = reader.IsDBNull(24) ? null : reader.GetInt32(24),
-                    SB = reader.IsDBNull(25) ? null : reader.GetInt32(25),
-                    CS = reader.IsDBNull(26) ? null : reader.GetInt32(26)
-                });
-            }
+            return await query
+                .OrderBy(bb => bb.GameSeq)
+                .ThenBy(bb => bb.Order)
+                .ToListAsync();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "讀取打者成績時發生錯誤");
+            _logger.LogError(ex, "讀?��??�Box資�??�發?�錯�?);
+            return Enumerable.Empty<BatterBox>();
         }
-
-        return batterBoxes;
     }
 
     public async Task<IEnumerable<PitcherBox>> GetPitcherBoxAsync(string? playerId = null, string? seasonId = null)
     {
-        var pitcherBoxes = new List<PitcherBox>();
-
         try
         {
-            using var connection = new SqliteConnection(_connectionString);
-            await connection.OpenAsync();
-
-            var sql = @"
-                SELECT id, seasonId, gameSeq, homeOrAway, [order], playerId,
-                       IPOuts, NP, BF, H, HR, BB, IBB, HB, SO, R, ER
-                FROM tblPitcherBox
-                WHERE 1=1";
+            var query = _context.PitcherBoxes.AsQueryable();
 
             if (!string.IsNullOrEmpty(playerId))
             {
-                sql += " AND playerId = @playerId";
-            }
-            if (!string.IsNullOrEmpty(seasonId))
-            {
-                sql += " AND seasonId = @seasonId";
+                query = query.Where(pb => pb.PlayerId == playerId);
             }
 
-            using var command = new SqliteCommand(sql, connection);
-            if (!string.IsNullOrEmpty(playerId))
-            {
-                command.Parameters.AddWithValue("@playerId", playerId);
-            }
             if (!string.IsNullOrEmpty(seasonId))
             {
-                command.Parameters.AddWithValue("@seasonId", seasonId);
+                query = query.Where(pb => pb.SeasonId == seasonId);
             }
 
-            using var reader = await command.ExecuteReaderAsync();
-            while (await reader.ReadAsync())
-            {
-                pitcherBoxes.Add(new PitcherBox
-                {
-                    Id = reader.GetInt32(0),
-                    SeasonId = reader.GetString(1),
-                    GameSeq = reader.GetInt32(2),
-                    HomeOrAway = reader.GetString(3),
-                    Order = reader.GetInt32(4),
-                    PlayerId = reader.IsDBNull(5) ? null : reader.GetString(5),
-                    IPOuts = reader.IsDBNull(6) ? null : reader.GetInt32(6),
-                    NP = reader.IsDBNull(7) ? null : reader.GetInt32(7),
-                    BF = reader.IsDBNull(8) ? null : reader.GetInt32(8),
-                    H = reader.IsDBNull(9) ? null : reader.GetInt32(9),
-                    HR = reader.IsDBNull(10) ? null : reader.GetInt32(10),
-                    BB = reader.IsDBNull(11) ? null : reader.GetInt32(11),
-                    IBB = reader.IsDBNull(12) ? null : reader.GetInt32(12),
-                    HB = reader.IsDBNull(13) ? null : reader.GetInt32(13),
-                    SO = reader.IsDBNull(14) ? null : reader.GetInt32(14),
-                    R = reader.IsDBNull(15) ? null : reader.GetInt32(15),
-                    ER = reader.IsDBNull(16) ? null : reader.GetInt32(16)
-                });
-            }
+            return await query
+                .OrderBy(pb => pb.GameSeq)
+                .ThenBy(pb => pb.Order)
+                .ToListAsync();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "讀取投手成績時發生錯誤");
+            _logger.LogError(ex, "讀?��??�Box資�??�發?�錯�?);
+            return Enumerable.Empty<PitcherBox>();
         }
-
-        return pitcherBoxes;
     }
 
     public async Task<IEnumerable<PA>> GetPAAsync(string? batterId = null, int? gameSeq = null)
     {
-        var paList = new List<PA>();
-
         try
         {
-            using var connection = new SqliteConnection(_connectionString);
-            await connection.OpenAsync();
-
-            var sql = @"
-                SELECT ID, seasonId, gameSeq, homeOrAway, inning, paSeq, scored,
-                       batterId, pitcherId, catcherId, strikes, balls, outs, bases,
-                       homeWE, RE, result, RBI, locationCode, trajectory, hardness,
-                       endAwayScores, endHomeScores, endOuts, endBases, WPA, RE24
-                FROM tblPA
-                WHERE 1=1";
+            var query = _context.PAs.AsQueryable();
 
             if (!string.IsNullOrEmpty(batterId))
             {
-                sql += " AND batterId = @batterId";
-            }
-            if (gameSeq.HasValue)
-            {
-                sql += " AND gameSeq = @gameSeq";
+                query = query.Where(pa => pa.BatterId == batterId);
             }
 
-            using var command = new SqliteCommand(sql, connection);
-            if (!string.IsNullOrEmpty(batterId))
-            {
-                command.Parameters.AddWithValue("@batterId", batterId);
-            }
             if (gameSeq.HasValue)
             {
-                command.Parameters.AddWithValue("@gameSeq", gameSeq.Value);
+                query = query.Where(pa => pa.GameSeq == gameSeq.Value);
             }
 
-            using var reader = await command.ExecuteReaderAsync();
-            while (await reader.ReadAsync())
-            {
-                paList.Add(new PA
-                {
-                    Id = reader.GetInt32(0),
-                    SeasonId = reader.GetString(1),
-                    GameSeq = reader.GetInt32(2),
-                    HomeOrAway = reader.GetString(3),
-                    Inning = reader.GetInt32(4),
-                    PaSeq = reader.GetInt32(5),
-                    Scored = reader.GetInt32(6) == 1,
-                    BatterId = reader.IsDBNull(7) ? null : reader.GetString(7),
-                    PitcherId = reader.IsDBNull(8) ? null : reader.GetString(8),
-                    CatcherId = reader.IsDBNull(9) ? null : reader.GetString(9),
-                    Strikes = reader.IsDBNull(10) ? null : reader.GetInt32(10),
-                    Balls = reader.IsDBNull(11) ? null : reader.GetInt32(11),
-                    Outs = reader.IsDBNull(12) ? null : reader.GetInt32(12),
-                    Bases = reader.IsDBNull(13) ? null : reader.GetInt32(13),
-                    HomeWE = reader.IsDBNull(14) ? null : reader.GetDecimal(14),
-                    RE = reader.IsDBNull(15) ? null : reader.GetDecimal(15),
-                    Result = reader.IsDBNull(16) ? null : reader.GetString(16),
-                    RBI = reader.IsDBNull(17) ? null : reader.GetInt32(17),
-                    LocationCode = reader.IsDBNull(18) ? null : reader.GetString(18),
-                    Trajectory = reader.IsDBNull(19) ? null : reader.GetString(19),
-                    Hardness = reader.IsDBNull(20) ? null : reader.GetString(20),
-                    EndAwayScores = reader.IsDBNull(21) ? null : reader.GetInt32(21),
-                    EndHomeScores = reader.IsDBNull(22) ? null : reader.GetInt32(22),
-                    EndOuts = reader.IsDBNull(23) ? null : reader.GetInt32(23),
-                    EndBases = reader.IsDBNull(24) ? null : reader.GetInt32(24),
-                    WPA = reader.IsDBNull(25) ? null : reader.GetDecimal(25),
-                    RE24 = reader.IsDBNull(26) ? null : reader.GetDecimal(26)
-                });
-            }
+            return await query
+                .OrderBy(pa => pa.GameSeq)
+                .ThenBy(pa => pa.Inning)
+                .ThenBy(pa => pa.PaSeq)
+                .ToListAsync();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "讀取打席資料時發生錯誤");
+            _logger.LogError(ex, "讀?��?席�??��??��??�誤");
+            return Enumerable.Empty<PA>();
         }
-
-        return paList;
     }
 
     public async Task<IEnumerable<Event>> GetEventsAsync(int paId)
     {
-        var events = new List<Event>();
-
         try
         {
-            using var connection = new SqliteConnection(_connectionString);
-            await connection.OpenAsync();
-
-            var sql = @"
-                SELECT ID, paID, [order], type, inPlay, isStrike, isBall,
-                       pitcherId, catcherId, batterId, pitchCode, pitchType
-                FROM tblEvent
-                WHERE paID = @paId
-                ORDER BY [order]";
-
-            using var command = new SqliteCommand(sql, connection);
-            command.Parameters.AddWithValue("@paId", paId);
-
-            using var reader = await command.ExecuteReaderAsync();
-            while (await reader.ReadAsync())
-            {
-                events.Add(new Event
-                {
-                    Id = reader.GetInt32(0),
-                    PaId = reader.GetInt32(1),
-                    Order = reader.GetInt32(2),
-                    Type = reader.IsDBNull(3) ? null : reader.GetString(3),
-                    InPlay = reader.GetInt32(4) == 1,
-                    IsStrike = reader.GetInt32(5) == 1,
-                    IsBall = reader.GetInt32(6) == 1,
-                    PitcherId = reader.IsDBNull(7) ? null : reader.GetString(7),
-                    CatcherId = reader.IsDBNull(8) ? null : reader.GetString(8),
-                    BatterId = reader.IsDBNull(9) ? null : reader.GetString(9),
-                    PitchCode = reader.IsDBNull(10) ? null : reader.GetString(10),
-                    PitchType = reader.IsDBNull(11) ? null : reader.GetString(11)
-                });
-            }
+            return await _context.Events
+                .Where(e => e.PaId == paId)
+                .ToListAsync();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "讀取事件資料時發生錯誤");
+            _logger.LogError(ex, "讀取事件資料時發生錯誤，paId={PaId}", paId);
+            return Enumerable.Empty<Event>();
         }
-
-        return events;
     }
 
     public async Task<BattingStats> CalculateBattingStatsAsync(string playerId, string? seasonId = null)
@@ -355,192 +161,116 @@ public class BaseballDbService : IBaseballDbService
         try
         {
             var batterBoxes = await GetBatterBoxAsync(playerId, seasonId);
-            
-            var stats = new BattingStats
-            {
-                Season = seasonId ?? "All",
-                PlateAppearances = batterBoxes.Sum(b => b.PA ?? 0),
-                AtBats = batterBoxes.Sum(b => b.AB ?? 0),
-                Hits = batterBoxes.Sum(b => b.H ?? 0),
-                Doubles = batterBoxes.Sum(b => b.TwoB ?? 0),
-                Triples = batterBoxes.Sum(b => b.ThreeB ?? 0),
-                HomeRuns = batterBoxes.Sum(b => b.HR ?? 0),
-                RBIs = batterBoxes.Sum(b => b.RBI ?? 0),
-                Runs = batterBoxes.Sum(b => b.R ?? 0),
-                StolenBases = batterBoxes.Sum(b => b.SB ?? 0),
-                CaughtStealing = batterBoxes.Sum(b => b.CS ?? 0),
-                Walks = batterBoxes.Sum(b => b.BB ?? 0),
-                Strikeouts = batterBoxes.Sum(b => b.SO ?? 0),
-                LastUpdated = DateTime.Now
-            };
 
-            // 從 tblBatter 取得球員名稱
-            using var connection = new SqliteConnection(_connectionString);
-            await connection.OpenAsync();
-            
-            var sql = "SELECT playerName, playerNumber FROM tblBatter WHERE playerId = @playerId";
-            using var command = new SqliteCommand(sql, connection);
-            command.Parameters.AddWithValue("@playerId", playerId);
-            
-            using var reader = await command.ExecuteReaderAsync();
-            if (await reader.ReadAsync())
+            var stats = batterBoxes.Aggregate(new BattingStats
             {
-                stats.PlayerName = reader.GetString(0);
+                PlayerId = playerId
+            }, (acc, bb) =>
+            {
+                acc.PA += bb.PA ?? 0;
+                acc.AB += bb.AB ?? 0;
+                acc.R += bb.R ?? 0;
+                acc.H += bb.H ?? 0;
+                acc.RBI += bb.RBI ?? 0;
+                acc.TwoB += bb.TwoB ?? 0;
+                acc.ThreeB += bb.ThreeB ?? 0;
+                acc.HR += bb.HR ?? 0;
+                acc.BB += bb.BB ?? 0;
+                acc.SO += bb.SO ?? 0;
+                return acc;
+            });
+
+            // 計�?衍�?統�?
+            if (stats.AB > 0)
+            {
+                stats.AVG = (double)stats.H / stats.AB;
             }
 
             return stats;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, $"計算球員 {playerId} 成績時發生錯誤");
-            throw;
+            _logger.LogError(ex, "計�??��?統�??�發?�錯誤�?playerId={PlayerId}", playerId);
+            return new BattingStats { PlayerId = playerId };
         }
     }
-   
+
     public async Task<IEnumerable<Batter>> GetAllBattersAsync(string? seasonId = null)
     {
-        var batters = new List<Batter>();
-
         try
         {
-            using var connection = new SqliteConnection(_connectionString);
-            await connection.OpenAsync();
-
-            var sql = "SELECT playerId, playerNumber, playerName FROM tblBatter";
-            
-            using var command = new SqliteCommand(sql, connection);
-            using var reader = await command.ExecuteReaderAsync();
-            
-            while (await reader.ReadAsync())
+            if (string.IsNullOrEmpty(seasonId))
             {
-                batters.Add(new Batter
-                {
-                    PlayerId = reader.GetString(0),
-                    PlayerNumber = reader.IsDBNull(1) ? null : reader.GetString(1),
-                    PlayerName = reader.GetString(2)
-                });
+                return await _context.Batters.ToListAsync();
             }
 
-            // 如果有 seasonId，用 LINQ 過濾出該季有出賽的打者
-            if (!string.IsNullOrEmpty(seasonId))
-            {
-                var batterBoxes = await GetBatterBoxAsync(seasonId: seasonId);
-                var activeBatterIds = batterBoxes.Select(b => b.PlayerId).Distinct().ToHashSet();
-                
-                return batters.Where(b => activeBatterIds.Contains(b.PlayerId)).ToList();
-            }
+            // ?��?賽季篩選：�?得該賽季?�出賽�??�員
+            var batterIds = await _context.BatterBoxes
+                .Where(bb => bb.SeasonId == seasonId)
+                .Select(bb => bb.PlayerId)
+                .Distinct()
+                .ToListAsync();
 
-            return batters;
+            return await _context.Batters
+                .Where(b => batterIds.Contains(b.PlayerId))
+                .ToListAsync();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "讀取打者資料時發生錯誤");
+            _logger.LogError(ex, "讀?��??��??��??��??�誤");
             return Enumerable.Empty<Batter>();
         }
     }
 
     public async Task<IEnumerable<Pitcher>> GetAllPitchersAsync(string? seasonId = null)
     {
-        var pitchers = new List<Pitcher>();
-
         try
         {
-            using var connection = new SqliteConnection(_connectionString);
-            await connection.OpenAsync();
-
-            var sql = "SELECT playerId, playerNumber, playerName FROM tblPitcher";
-            
-            using var command = new SqliteCommand(sql, connection);
-            using var reader = await command.ExecuteReaderAsync();
-            
-            while (await reader.ReadAsync())
+            if (string.IsNullOrEmpty(seasonId))
             {
-                pitchers.Add(new Pitcher
-                {
-                    PlayerId = reader.GetString(0),
-                    PlayerNumber = reader.IsDBNull(1) ? null : reader.GetString(1),
-                    PlayerName = reader.GetString(2)
-                });
+                return await _context.Pitchers.ToListAsync();
             }
 
-            // 如果有 seasonId，用 LINQ 過濾出該季有出賽的投手
-            if (!string.IsNullOrEmpty(seasonId))
-            {
-                var pitcherBoxes = await GetPitcherBoxAsync(seasonId: seasonId);
-                var activePitcherIds = pitcherBoxes.Select(p => p.PlayerId).Distinct().ToHashSet();
-                
-                return pitchers.Where(p => activePitcherIds.Contains(p.PlayerId)).ToList();
-            }
+            // ?��?賽季篩選：�?得該賽季?�出賽�??��?
+            var pitcherIds = await _context.PitcherBoxes
+                .Where(pb => pb.SeasonId == seasonId)
+                .Select(pb => pb.PlayerId)
+                .Distinct()
+                .ToListAsync();
 
-            return pitchers;
+            return await _context.Pitchers
+                .Where(p => pitcherIds.Contains(p.PlayerId))
+                .ToListAsync();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "讀取投手資料時發生錯誤");
+            _logger.LogError(ex, "讀?��??��??��??��??�誤");
             return Enumerable.Empty<Pitcher>();
         }
     }
 
     public async Task<IEnumerable<Team>> GetAllTeamsAsync()
     {
-        var teams = new List<Team>();
-
         try
         {
-            using var connection = new SqliteConnection(_connectionString);
-            await connection.OpenAsync();
-
-            var sql = "SELECT teamId, team FROM tblTeam";
-            
-            using var command = new SqliteCommand(sql, connection);
-            using var reader = await command.ExecuteReaderAsync();
-            
-            while (await reader.ReadAsync())
-            {
-                teams.Add(new Team
-                {
-                    TeamId = reader.GetString(0),
-                    TeamName = reader.GetString(1)
-                });
-            }
-
-            return teams;
+            return await _context.Teams.ToListAsync();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "讀取球隊資料時發生錯誤");
+            _logger.LogError(ex, "讀?��??��??��??��??�誤");
             return Enumerable.Empty<Team>();
         }
     }
 
     public async Task<IEnumerable<Stadium>> GetAllStadiumsAsync()
     {
-        var stadiums = new List<Stadium>();
-
         try
         {
-            using var connection = new SqliteConnection(_connectionString);
-            await connection.OpenAsync();
-
-            var sql = "SELECT id, stadium FROM tblStadium";
-            
-            using var command = new SqliteCommand(sql, connection);
-            using var reader = await command.ExecuteReaderAsync();
-            
-            while (await reader.ReadAsync())
-            {
-                stadiums.Add(new Stadium
-                {
-                    Id = reader.GetInt32(0),
-                    stadium = reader.GetString(1)
-                });
-            }
-
-            return stadiums;
+            return await _context.Stadiums.ToListAsync();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "讀取球場資料時發生錯誤");
+            _logger.LogError(ex, "讀?�場?��??��??��??�誤");
             return Enumerable.Empty<Stadium>();
         }
     }
@@ -549,14 +279,12 @@ public class BaseballDbService : IBaseballDbService
     {
         try
         {
-            var batters = await GetAllBattersAsync();
-            
-            // 使用 LINQ 建立 ID -> Name 的字典
-            return batters.ToDictionary(b => b.PlayerId, b => b.PlayerName);
+            return await _context.Batters
+                .ToDictionaryAsync(b => b.PlayerId, b => b.PlayerName);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "建立打者名稱對照表時發生錯誤");
+            _logger.LogError(ex, "建�??�員?�稱對照表�??��??�誤");
             return new Dictionary<string, string>();
         }
     }
@@ -565,14 +293,12 @@ public class BaseballDbService : IBaseballDbService
     {
         try
         {
-            var pitchers = await GetAllPitchersAsync();
-            
-            // 使用 LINQ 建立 ID -> Name 的字典
-            return pitchers.ToDictionary(p => p.PlayerId, p => p.PlayerName);
+            return await _context.Pitchers
+                .ToDictionaryAsync(p => p.PlayerId, p => p.PlayerName);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "建立投手名稱對照表時發生錯誤");
+            _logger.LogError(ex, "建�??��??�稱對照表�??��??�誤");
             return new Dictionary<string, string>();
         }
     }
@@ -581,106 +307,78 @@ public class BaseballDbService : IBaseballDbService
     {
         try
         {
-            var batterBoxes = await GetBatterBoxAsync(seasonId: seasonId);
-            var batterNames = await GetBatterNameMapAsync();
+            var query = _context.BatterBoxes.AsQueryable();
 
-            // 使用 LINQ 進行分組、聚合、排序
-            var topBatters = batterBoxes
-                .Where(b => !string.IsNullOrEmpty(b.PlayerId))
-                .GroupBy(b => b.PlayerId)
+            if (!string.IsNullOrEmpty(seasonId))
+            {
+                query = query.Where(bb => bb.SeasonId == seasonId);
+            }
+
+            var topBatters = await query
+                .GroupBy(bb => bb.PlayerId)
                 .Select(g => new BattingStats
                 {
-                    PlayerName = batterNames.GetValueOrDefault(g.Key ?? "", "未知"),
-                    Season = seasonId ?? "All",
-                    PlateAppearances = g.Sum(b => b.PA ?? 0),
-                    AtBats = g.Sum(b => b.AB ?? 0),
-                    Hits = g.Sum(b => b.H ?? 0),
-                    Doubles = g.Sum(b => b.TwoB ?? 0),
-                    Triples = g.Sum(b => b.ThreeB ?? 0),
-                    HomeRuns = g.Sum(b => b.HR ?? 0),
-                    RBIs = g.Sum(b => b.RBI ?? 0),
-                    Runs = g.Sum(b => b.R ?? 0),
-                    StolenBases = g.Sum(b => b.SB ?? 0),
-                    CaughtStealing = g.Sum(b => b.CS ?? 0),
-                    Walks = g.Sum(b => b.BB ?? 0),
-                    Strikeouts = g.Sum(b => b.SO ?? 0),
-                    LastUpdated = DateTime.Now
+                    PlayerId = g.Key,
+                    PA = g.Sum(bb => bb.PA ?? 0),
+                    AB = g.Sum(bb => bb.AB ?? 0),
+                    R = g.Sum(bb => bb.R ?? 0),
+                    H = g.Sum(bb => bb.H ?? 0),
+                    RBI = g.Sum(bb => bb.RBI ?? 0),
+                    TwoB = g.Sum(bb => bb.TwoB ?? 0),
+                    ThreeB = g.Sum(bb => bb.ThreeB ?? 0),
+                    HR = g.Sum(bb => bb.HR ?? 0),
+                    BB = g.Sum(bb => bb.BB ?? 0),
+                    SO = g.Sum(bb => bb.SO ?? 0)
                 })
-                .OrderByDescending(s => s.Hits)  // 按安打數排序
+                .OrderByDescending(s => s.H)
                 .Take(topN)
-                .ToList();
+                .ToListAsync();
+
+            // 計�??��???
+            foreach (var stats in topBatters)
+            {
+                if (stats.AB > 0)
+                {
+                    stats.AVG = (double)stats.H / stats.AB;
+                }
+            }
+
+            // 載入?�員?�稱
+            var playerIds = topBatters.Select(s => s.PlayerId).ToList();
+            var batters = await _context.Batters
+                .Where(b => playerIds.Contains(b.PlayerId))
+                .ToDictionaryAsync(b => b.PlayerId, b => b.PlayerName);
+
+            foreach (var stats in topBatters)
+            {
+                if (batters.TryGetValue(stats.PlayerId, out var name))
+                {
+                    stats.PlayerName = name;
+                }
+            }
 
             return topBatters;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "取得打擊排行榜時發生錯誤");
+            _logger.LogError(ex, "?��??��??�者�??��??��??�誤");
             return Enumerable.Empty<BattingStats>();
         }
     }
 
     public async Task<IEnumerable<PA>> GetPAsByGameAsync(string seasonId, int gameSeq)
     {
-        var paList = new List<PA>();
-
         try
         {
-            using var connection = new SqliteConnection(_connectionString);
-            await connection.OpenAsync();
-
-            var sql = @"
-                SELECT ID, seasonId, gameSeq, homeOrAway, inning, paSeq, scored,
-                       batterId, pitcherId, catcherId, strikes, balls, outs, bases,
-                       homeWE, RE, result, RBI, locationCode, trajectory, hardness,
-                       endAwayScores, endHomeScores, endOuts, endBases, WPA, RE24
-                FROM tblPA
-                WHERE seasonId = @seasonId AND gameSeq = @gameSeq
-                ORDER BY inning, paSeq";
-
-            using var command = new SqliteCommand(sql, connection);
-            command.Parameters.AddWithValue("@seasonId", seasonId);
-            command.Parameters.AddWithValue("@gameSeq", gameSeq);
-
-            using var reader = await command.ExecuteReaderAsync();
-            while (await reader.ReadAsync())
-            {
-                paList.Add(new PA
-                {
-                    Id = reader.GetInt32(0),
-                    SeasonId = reader.GetString(1),
-                    GameSeq = reader.GetInt32(2),
-                    HomeOrAway = reader.GetString(3),
-                    Inning = reader.GetInt32(4),
-                    PaSeq = reader.GetInt32(5),
-                    Scored = reader.GetInt32(6) == 1,
-                    BatterId = reader.IsDBNull(7) ? null : reader.GetString(7),
-                    PitcherId = reader.IsDBNull(8) ? null : reader.GetString(8),
-                    CatcherId = reader.IsDBNull(9) ? null : reader.GetString(9),
-                    Strikes = reader.IsDBNull(10) ? null : reader.GetInt32(10),
-                    Balls = reader.IsDBNull(11) ? null : reader.GetInt32(11),
-                    Outs = reader.IsDBNull(12) ? null : reader.GetInt32(12),
-                    Bases = reader.IsDBNull(13) ? null : reader.GetInt32(13),
-                    HomeWE = reader.IsDBNull(14) ? null : reader.GetDecimal(14),
-                    RE = reader.IsDBNull(15) ? null : reader.GetDecimal(15),
-                    Result = reader.IsDBNull(16) ? null : reader.GetString(16),
-                    RBI = reader.IsDBNull(17) ? null : reader.GetInt32(17),
-                    LocationCode = reader.IsDBNull(18) ? null : reader.GetString(18),
-                    Trajectory = reader.IsDBNull(19) ? null : reader.GetString(19),
-                    Hardness = reader.IsDBNull(20) ? null : reader.GetString(20),
-                    EndAwayScores = reader.IsDBNull(21) ? null : reader.GetInt32(21),
-                    EndHomeScores = reader.IsDBNull(22) ? null : reader.GetInt32(22),
-                    EndOuts = reader.IsDBNull(23) ? null : reader.GetInt32(23),
-                    EndBases = reader.IsDBNull(24) ? null : reader.GetInt32(24),
-                    WPA = reader.IsDBNull(25) ? null : reader.GetDecimal(25),
-                    RE24 = reader.IsDBNull(26) ? null : reader.GetDecimal(26)
-                });
-            }
-
-            return paList;
+            return await _context.PAs
+                .Where(pa => pa.SeasonId == seasonId && pa.GameSeq == gameSeq)
+                .OrderBy(pa => pa.Inning)
+                .ThenBy(pa => pa.PaSeq)
+                .ToListAsync();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "讀取比賽打席資料時發生錯誤");
+            _logger.LogError(ex, "讀?��?賽�?席�??��??��??�誤，seasonId={SeasonId}, gameSeq={GameSeq}", seasonId, gameSeq);
             return Enumerable.Empty<PA>();
         }
     }

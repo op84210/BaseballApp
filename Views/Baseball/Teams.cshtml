@@ -1,0 +1,28 @@
+@model IEnumerable<dynamic>
+
+@{
+    ViewData["Title"] = "球隊列表";
+}
+
+<div class="container mt-4">
+    <h1 class="mb-4">🏆 球隊列表</h1>
+
+    <div class="row">
+        @foreach (var teamStat in Model)
+        {
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h3 class="card-title">@teamStat.Team.TeamName</h3>
+                        <p class="card-text">
+                            <strong>球隊代碼:</strong> @teamStat.Team.TeamId<br>
+                            <strong>比賽場次:</strong> @teamStat.Games 場
+                        </p>
+                        <a href="@Url.Action("TeamDetail", new { teamId = teamStat.Team.TeamId, seasonId = ViewBag.SeasonId })" 
+                           class="btn btn-primary">查看詳情</a>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
