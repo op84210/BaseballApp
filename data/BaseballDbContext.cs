@@ -53,9 +53,9 @@ public class BaseballDbContext : DbContext
         modelBuilder.Entity<Stadium>(entity =>
         {
             entity.ToTable("tblStadium");
-            entity.HasKey(e => e.StadiumId);
-            entity.Property(e => e.StadiumId).HasColumnName("stadiumId");
-            entity.Property(e => e.StadiumName).HasColumnName("stadiumName");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("stadiumId");
+            entity.Property(e => e.stadium).HasColumnName("stadiumName");
         });
 
         // tblBatter
@@ -95,8 +95,7 @@ public class BaseballDbContext : DbContext
         modelBuilder.Entity<Scores>(entity =>
         {
             entity.ToTable("tblScores");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasColumnName("id").ValueGeneratedOnAdd();
+            entity.HasKey(e => e.SeasonId);
             entity.Property(e => e.SeasonId).HasColumnName("seasonId");
             entity.Property(e => e.GameSeq).HasColumnName("gameSeq");
             entity.Property(e => e.HomeOrAway).HasColumnName("homeOrAway");
@@ -176,12 +175,12 @@ public class BaseballDbContext : DbContext
             entity.Property(e => e.BatterId).HasColumnName("batterId");
             entity.Property(e => e.PitcherId).HasColumnName("pitcherId");
             entity.Property(e => e.CatcherId).HasColumnName("catcherId");
-            entity.Property(e => e.PaResult).HasColumnName("paResult");
-            entity.Property(e => e.OutOrNot).HasColumnName("outOrNot");
+            //entity.Property(e => e.PaResult).HasColumnName("paResult");
+            //entity.Property(e => e.OutOrNot).HasColumnName("outOrNot");
             entity.Property(e => e.Bases).HasColumnName("bases");
             entity.Property(e => e.EndBases).HasColumnName("endBases");
-            entity.Property(e => e.Score).HasColumnName("score");
-            entity.Property(e => e.Wpa).HasColumnName("wpa");
+            // entity.Property(e => e.Score).HasColumnName("score");
+            // entity.Property(e => e.Wpa).HasColumnName("wpa");
         });
 
         // tblEvent
@@ -191,14 +190,14 @@ public class BaseballDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").ValueGeneratedOnAdd();
             entity.Property(e => e.PaId).HasColumnName("paId");
-            entity.Property(e => e.EventSeq).HasColumnName("eventSeq");
-            entity.Property(e => e.EventType).HasColumnName("eventType");
+            // entity.Property(e => e.EventSeq).HasColumnName("eventSeq");
+            // entity.Property(e => e.EventType).HasColumnName("eventType");
             entity.Property(e => e.PitchCode).HasColumnName("pitchCode");
             entity.Property(e => e.PitchType).HasColumnName("pitchType");
-            entity.Property(e => e.Result).HasColumnName("result");
+            //entity.Property(e => e.Result).HasColumnName("result");
             entity.Property(e => e.Velocity).HasColumnName("velocity");
-            entity.Property(e => e.Hardness).HasColumnName("hardness");
-            entity.Property(e => e.Trajectory).HasColumnName("trajectory");
+            // entity.Property(e => e.Hardness).HasColumnName("hardness");
+            // entity.Property(e => e.Trajectory).HasColumnName("trajectory");
             entity.Property(e => e.CoordX).HasColumnName("coordX");
             entity.Property(e => e.CoordY).HasColumnName("coordY");
         });
@@ -209,11 +208,11 @@ public class BaseballDbContext : DbContext
             entity.ToTable("tblRunner");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").ValueGeneratedOnAdd();
-            entity.Property(e => e.PaId).HasColumnName("paId");
+            //entity.Property(e => e.PaId).HasColumnName("paId");
             entity.Property(e => e.RunnerId).HasColumnName("runnerId");
-            entity.Property(e => e.RunnerType).HasColumnName("runnerType");
-            entity.Property(e => e.StartBase).HasColumnName("startBase");
-            entity.Property(e => e.EndBase).HasColumnName("endBase");
+            // entity.Property(e => e.RunnerType).HasColumnName("runnerType");
+            // entity.Property(e => e.StartBase).HasColumnName("startBase");
+            // entity.Property(e => e.EndBase).HasColumnName("endBase");
         });
     }
 }

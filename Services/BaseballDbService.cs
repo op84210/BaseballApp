@@ -51,7 +51,7 @@ public class BaseballDbService : IBaseballDbService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "讀?��?賽�??��??��??�誤");
+            _logger.LogError(ex, "讀取賽事資料時發生錯誤");
             return Enumerable.Empty<Game>();
         }
     }
@@ -79,7 +79,7 @@ public class BaseballDbService : IBaseballDbService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "讀?��??�Box資�??�發?�錯�?);
+            _logger.LogError(ex, "讀取打擊者資料時發生錯誤");
             return Enumerable.Empty<BatterBox>();
         }
     }
@@ -107,7 +107,7 @@ public class BaseballDbService : IBaseballDbService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "讀?��??�Box資�??�發?�錯�?);
+            _logger.LogError(ex, "讀取投手資料時發生錯誤");
             return Enumerable.Empty<PitcherBox>();
         }
     }
@@ -136,7 +136,7 @@ public class BaseballDbService : IBaseballDbService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "讀?��?席�??��??��??�誤");
+            _logger.LogError(ex, "讀取打席資料時發生錯誤");
             return Enumerable.Empty<PA>();
         }
     }
@@ -156,44 +156,44 @@ public class BaseballDbService : IBaseballDbService
         }
     }
 
-    public async Task<BattingStats> CalculateBattingStatsAsync(string playerId, string? seasonId = null)
-    {
-        try
-        {
-            var batterBoxes = await GetBatterBoxAsync(playerId, seasonId);
+    // public async Task<BattingStats> CalculateBattingStatsAsync(string playerId, string? seasonId = null)
+    // {
+    //     try
+    //     {
+    //         var batterBoxes = await GetBatterBoxAsync(playerId, seasonId);
 
-            var stats = batterBoxes.Aggregate(new BattingStats
-            {
-                PlayerId = playerId
-            }, (acc, bb) =>
-            {
-                acc.PA += bb.PA ?? 0;
-                acc.AB += bb.AB ?? 0;
-                acc.R += bb.R ?? 0;
-                acc.H += bb.H ?? 0;
-                acc.RBI += bb.RBI ?? 0;
-                acc.TwoB += bb.TwoB ?? 0;
-                acc.ThreeB += bb.ThreeB ?? 0;
-                acc.HR += bb.HR ?? 0;
-                acc.BB += bb.BB ?? 0;
-                acc.SO += bb.SO ?? 0;
-                return acc;
-            });
+    //         var stats = batterBoxes.Aggregate(new BattingStats
+    //         {
+    //             PlayerId = playerId
+    //         }, (acc, bb) =>
+    //         {
+    //             acc.PA += bb.PA ?? 0;
+    //             acc.AB += bb.AB ?? 0;
+    //             acc.R += bb.R ?? 0;
+    //             acc.H += bb.H ?? 0;
+    //             acc.RBI += bb.RBI ?? 0;
+    //             acc.TwoB += bb.TwoB ?? 0;
+    //             acc.ThreeB += bb.ThreeB ?? 0;
+    //             acc.HR += bb.HR ?? 0;
+    //             acc.BB += bb.BB ?? 0;
+    //             acc.SO += bb.SO ?? 0;
+    //             return acc;
+    //         });
 
-            // 計�?衍�?統�?
-            if (stats.AB > 0)
-            {
-                stats.AVG = (double)stats.H / stats.AB;
-            }
+    //         // 計算衍生統計
+    //         if (stats.AB > 0)
+    //         {
+    //             stats.AVG = (double)stats.H / stats.AB;
+    //         }
 
-            return stats;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "計�??��?統�??�發?�錯誤�?playerId={PlayerId}", playerId);
-            return new BattingStats { PlayerId = playerId };
-        }
-    }
+    //          return stats;
+    //     }
+    //     catch (Exception ex)
+    //     {
+    //         _logger.LogError(ex, "計算打擊統計時發生錯誤，playerId={PlayerId}", playerId);
+    //         return new BattingStats { PlayerId = playerId };
+    //     }
+    // }
 
     public async Task<IEnumerable<Batter>> GetAllBattersAsync(string? seasonId = null)
     {
@@ -303,65 +303,23 @@ public class BaseballDbService : IBaseballDbService
         }
     }
 
+    /// <summary>
+    /// 取得指定賽季的前 N 名打者
+    /// </summary>
+    /// <param name="seasonId"></param>
+    /// <param name="topN"></param>
+    /// <returns></returns>
     public async Task<IEnumerable<BattingStats>> GetTopBattersAsync(string? seasonId = null, int topN = 10)
     {
         try
         {
-            var query = _context.BatterBoxes.AsQueryable();
-
-            if (!string.IsNullOrEmpty(seasonId))
-            {
-                query = query.Where(bb => bb.SeasonId == seasonId);
-            }
-
-            var topBatters = await query
-                .GroupBy(bb => bb.PlayerId)
-                .Select(g => new BattingStats
-                {
-                    PlayerId = g.Key,
-                    PA = g.Sum(bb => bb.PA ?? 0),
-                    AB = g.Sum(bb => bb.AB ?? 0),
-                    R = g.Sum(bb => bb.R ?? 0),
-                    H = g.Sum(bb => bb.H ?? 0),
-                    RBI = g.Sum(bb => bb.RBI ?? 0),
-                    TwoB = g.Sum(bb => bb.TwoB ?? 0),
-                    ThreeB = g.Sum(bb => bb.ThreeB ?? 0),
-                    HR = g.Sum(bb => bb.HR ?? 0),
-                    BB = g.Sum(bb => bb.BB ?? 0),
-                    SO = g.Sum(bb => bb.SO ?? 0)
-                })
-                .OrderByDescending(s => s.H)
-                .Take(topN)
-                .ToListAsync();
-
-            // 計�??��???
-            foreach (var stats in topBatters)
-            {
-                if (stats.AB > 0)
-                {
-                    stats.AVG = (double)stats.H / stats.AB;
-                }
-            }
-
-            // 載入?�員?�稱
-            var playerIds = topBatters.Select(s => s.PlayerId).ToList();
-            var batters = await _context.Batters
-                .Where(b => playerIds.Contains(b.PlayerId))
-                .ToDictionaryAsync(b => b.PlayerId, b => b.PlayerName);
-
-            foreach (var stats in topBatters)
-            {
-                if (batters.TryGetValue(stats.PlayerId, out var name))
-                {
-                    stats.PlayerName = name;
-                }
-            }
-
-            return topBatters;
+            //暫時不實作
+            List<BattingStats> allStats = [];
+            return allStats;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "?��??��??�者�??��??��??�誤");
+            _logger.LogError(ex, "取得前 N 名打者資料時發生錯誤");
             return Enumerable.Empty<BattingStats>();
         }
     }
@@ -381,5 +339,10 @@ public class BaseballDbService : IBaseballDbService
             _logger.LogError(ex, "讀?��?賽�?席�??��??��??�誤，seasonId={SeasonId}, gameSeq={GameSeq}", seasonId, gameSeq);
             return Enumerable.Empty<PA>();
         }
+    }
+
+    public Task<BattingStats> CalculateBattingStatsAsync(string playerId, string? seasonId = null)
+    {
+        throw new NotImplementedException();
     }
 }
