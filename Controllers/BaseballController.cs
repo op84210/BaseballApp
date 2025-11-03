@@ -6,13 +6,14 @@ namespace BaseballApp.Controllers;
 
 public class BaseballController : Controller
 {
-    private readonly IBaseballDbService _baseballDataService;
+    private readonly IBaseballDbService _baseballDbService;
     private readonly ILogger<BaseballController> _logger;
 
-    public BaseballController(IBaseballDbService baseballDataService, ILogger<BaseballController> logger)
+    public BaseballController(IBaseballDbService baseballDbService, ILogger<BaseballController> logger)
     {
-        _baseballDataService = baseballDataService;
+        _baseballDbService = baseballDbService;
         _logger = logger;
     }
+
 
 }

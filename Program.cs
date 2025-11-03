@@ -8,7 +8,7 @@ builder.Services.AddControllers(); // 加入 API 控制器
 builder.Services.AddHttpClient();
 
 // 註冊棒球數據服務
-builder.Services.AddScoped<BaseballApp.Services.IBaseballDataService, BaseballApp.Services.BaseballDataService>();
+builder.Services.AddScoped<BaseballApp.Services.IBaseballDbService, BaseballApp.Services.BaseballDbService>();
 
 var app = builder.Build();
 
