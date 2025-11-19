@@ -58,8 +58,7 @@ BaseballApp/
 ├── Models/              # 數據模型
 ├── Views/               # Razor 視圖
 │   ├── Home/
-│   │   ├── Index.cshtml
-│   │   └── Charts.cshtml    # 圖表頁面
+│   │   └── Index.cshtml
 │   └── Shared/             # 共用視圖
 ├── wwwroot/             # 靜態資源
 │   ├── css/

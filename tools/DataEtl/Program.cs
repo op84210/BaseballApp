@@ -11,19 +11,22 @@ class Program
     {
         /// 設定預設路徑與參數
         string root = @"c:\Users\kwlin\Desktop\ideas\BaseballApp";
-        var input = $@"{root}\data\CPBL-2024-Challenge-OpenData\CPBL-2024-Challenge-OpenData.json";
+        var inputFiles = new List<string>
+        {
+            $@"{root}\data\CPBL-2024-Challenge-OpenData\CPBL-2024-Challenge-OpenData.json",
+            $@"{root}\data\CPBL-2024-OpenData\CPBL-2024-OpenData.json",
+            $@"{root}\data\CPBL-2024-TaiwanSeries-OpenData\CPBL-2024-TaiwanSeries-OpenData.json"
+        };
         var dbPath = $@"{root}\data\baseball.db";
 
         /// 解析命令列參數
-        for (int i = 0; i < args.Length - 1; i++)
+        if (args.Length > 0 && args[0].Equals("--db", StringComparison.OrdinalIgnoreCase) && args.Length > 1)
         {
-            if (args[i].Equals("--input", StringComparison.OrdinalIgnoreCase)) input = args[i + 1];
-            if (args[i].Equals("--db", StringComparison.OrdinalIgnoreCase)) dbPath = args[i + 1];
+            dbPath = args[1];
         }
 
         // 執行 ETL
         Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
-        if (!File.Exists(input)) { Console.Error.WriteLine($"Input not found: {input}"); return; }
 
         // 連接 SQLite
         using var conn = new SqliteConnection($"Data Source={dbPath};Cache=Shared");
@@ -32,23 +35,39 @@ class Program
         // 建立資料表
         CreateTables(conn);
 
-        // 讀取 JSON 檔案
-        await using var fs = File.OpenRead(input);
-        using var doc = await JsonDocument.ParseAsync(fs);
-        
-        // 檢查 JSON 格式（支援陣列或單一物件）
-        if (doc.RootElement.ValueKind != JsonValueKind.Array && doc.RootElement.ValueKind != JsonValueKind.Object)
+        // 依序處理每個 JSON 檔案
+        foreach (var inputFile in inputFiles)
         {
-            Console.Error.WriteLine("Expected JSON array or object at root");
-            return;
+            if (!File.Exists(inputFile))
+            {
+                Console.WriteLine($"[SKIP] File not found: {inputFile}");
+                continue;
+            }
+
+            Console.WriteLine($"\n[INFO] Processing: {Path.GetFileName(inputFile)}");
+
+            // 讀取 JSON 檔案
+            await using var fs = File.OpenRead(inputFile);
+            using var doc = await JsonDocument.ParseAsync(fs);
+            
+            // 檢查 JSON 格式（支援陣列或單一物件）
+            if (doc.RootElement.ValueKind != JsonValueKind.Array && doc.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                Console.Error.WriteLine($"[ERROR] Expected JSON array or object at root in {inputFile}");
+                continue;
+            }
+
+            using var tx = conn.BeginTransaction();
+
+            // 插入資料到資料表
+            InsertTables(conn, doc);
+
+            tx.Commit();
+
+            Console.WriteLine($"[OK] Completed: {Path.GetFileName(inputFile)}\n");
         }
 
-        using var tx = conn.BeginTransaction();
-
-        // 插入資料到資料表
-        InsertTables(conn, doc);
-
-        tx.Commit();
+        Console.WriteLine("[OK] All files processed successfully!");
     }
 
     private static string? GetString(JsonElement obj, params string[] names)
@@ -137,6 +156,7 @@ class Program
         CreateTblTeam(conn);
         CreateTblBatter(conn);
         CreateTblPitcher(conn);
+        CreateTblPlayerTeam(conn);
 
         // 建立 Game Tables
         CreateTblGame(conn);
@@ -255,6 +275,38 @@ class Program
 
         using (var cmd = conn.CreateCommand()) { cmd.CommandText = ddl; cmd.ExecuteNonQuery(); }
         Console.WriteLine("[OK] tblPitcher created.");
+    }
+
+    /// <summary>
+    /// 建立 tblPlayerTeam 資料表 - 記錄球員與球隊的關係（支援轉隊）
+    /// </summary>
+    /// <param name="conn">
+    /// 資料庫連線
+    /// </param>
+    private static void CreateTblPlayerTeam(SqliteConnection conn)
+    {
+        var ddl = @"
+            -- tblPlayerTeam
+            CREATE TABLE IF NOT EXISTS tblPlayerTeam (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                playerId TEXT NOT NULL,
+                teamId TEXT NOT NULL,
+                seasonId TEXT NOT NULL,
+                playerNumber TEXT,
+                startDate TEXT,
+                endDate TEXT,
+                isActive INTEGER DEFAULT 1,
+                FOREIGN KEY (teamId) REFERENCES tblTeam(teamId),
+                FOREIGN KEY (seasonId) REFERENCES tblSeason(seasonId)
+            );
+            CREATE INDEX IF NOT EXISTS idx_playerteam_player ON tblPlayerTeam(playerId);
+            CREATE INDEX IF NOT EXISTS idx_playerteam_team ON tblPlayerTeam(teamId);
+            CREATE INDEX IF NOT EXISTS idx_playerteam_season ON tblPlayerTeam(seasonId);
+            CREATE INDEX IF NOT EXISTS idx_playerteam_active ON tblPlayerTeam(playerId, isActive);
+        ";
+
+        using (var cmd = conn.CreateCommand()) { cmd.CommandText = ddl; cmd.ExecuteNonQuery(); }
+        Console.WriteLine("[OK] tblPlayerTeam created.");
     }
 
     /// <summary>
@@ -552,6 +604,7 @@ class Program
         masterData.InsertedTeams = InsertTblTeam(conn, doc);
         masterData.InsertedBatters = InsertTblBatter(conn, doc);
         masterData.InsertedPitchers = InsertTblPitcher(conn, doc);
+        InsertTblPlayerTeam(conn, doc, masterData);
 
         // 建立 Game Tables
         InsertTblGame(conn, doc, masterData);
@@ -852,6 +905,122 @@ class Program
 
         Console.WriteLine($"[OK] Inserted {pitchers.Count} records into tblPitcher.");
         return pitchers;
+    }
+
+    /// <summary>
+    /// 插入 tblPlayerTeam 初始資料 - 從 BatterBox 和 PitcherBox 中提取球員球隊關係
+    /// </summary>
+    /// <param name="conn">
+    /// 資料庫連線
+    /// </param>
+    /// <param name="doc">
+    /// JSON 文件
+    /// </param>
+    /// <param name="masterData">
+    /// 主資料
+    /// </param>
+    private static void InsertTblPlayerTeam(SqliteConnection conn, JsonDocument doc, MasterData masterData)
+    {
+        var playerTeamRelations = new Dictionary<string, (string playerId, string teamId, string seasonId, string playerNumber, DateTime date)>();
+
+        // 遍歷每場比賽
+        foreach (var game in GetGames(doc))
+        {
+            var seasonId = GetString(game, "seasonId") ?? "";
+            var dateStr = GetString(game, "date") ?? "";
+            DateTime gameDate = DateTime.TryParse(dateStr, out var parsedDate) ? parsedDate : DateTime.MinValue;
+            var homeTeamId = GetString(game, "homeTeamId") ?? "";
+            var awayTeamId = GetString(game, "awayTeamId") ?? "";
+
+            // 處理客隊打者
+            if (game.TryGetProperty("awayBatterBox", out var awayBat) && awayBat.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var bat in awayBat.EnumerateArray())
+                {
+                    var playerId = GetString(bat, "playerId");
+                    var playerNumber = GetString(bat, "playerNumber") ?? "";
+                    if (!string.IsNullOrEmpty(playerId) && !string.IsNullOrEmpty(awayTeamId))
+                    {
+                        var key = $"{playerId}-{awayTeamId}-{seasonId}";
+                        if (!playerTeamRelations.ContainsKey(key) || playerTeamRelations[key].date > gameDate)
+                        {
+                            playerTeamRelations[key] = (playerId, awayTeamId, seasonId, playerNumber, gameDate);
+                        }
+                    }
+                }
+            }
+
+            // 處理主隊打者
+            if (game.TryGetProperty("homeBatterBox", out var homeBat) && homeBat.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var bat in homeBat.EnumerateArray())
+                {
+                    var playerId = GetString(bat, "playerId");
+                    var playerNumber = GetString(bat, "playerNumber") ?? "";
+                    if (!string.IsNullOrEmpty(playerId) && !string.IsNullOrEmpty(homeTeamId))
+                    {
+                        var key = $"{playerId}-{homeTeamId}-{seasonId}";
+                        if (!playerTeamRelations.ContainsKey(key) || playerTeamRelations[key].date > gameDate)
+                        {
+                            playerTeamRelations[key] = (playerId, homeTeamId, seasonId, playerNumber, gameDate);
+                        }
+                    }
+                }
+            }
+
+            // 處理客隊投手
+            if (game.TryGetProperty("awayPitcherBox", out var awayPit) && awayPit.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var pit in awayPit.EnumerateArray())
+                {
+                    var playerId = GetString(pit, "playerId");
+                    var playerNumber = GetString(pit, "playerNumber") ?? "";
+                    if (!string.IsNullOrEmpty(playerId) && !string.IsNullOrEmpty(awayTeamId))
+                    {
+                        var key = $"{playerId}-{awayTeamId}-{seasonId}";
+                        if (!playerTeamRelations.ContainsKey(key) || playerTeamRelations[key].date > gameDate)
+                        {
+                            playerTeamRelations[key] = (playerId, awayTeamId, seasonId, playerNumber, gameDate);
+                        }
+                    }
+                }
+            }
+
+            // 處理主隊投手
+            if (game.TryGetProperty("homePitcherBox", out var homePit) && homePit.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var pit in homePit.EnumerateArray())
+                {
+                    var playerId = GetString(pit, "playerId");
+                    var playerNumber = GetString(pit, "playerNumber") ?? "";
+                    if (!string.IsNullOrEmpty(playerId) && !string.IsNullOrEmpty(homeTeamId))
+                    {
+                        var key = $"{playerId}-{homeTeamId}-{seasonId}";
+                        if (!playerTeamRelations.ContainsKey(key) || playerTeamRelations[key].date > gameDate)
+                        {
+                            playerTeamRelations[key] = (playerId, homeTeamId, seasonId, playerNumber, gameDate);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 插入球員球隊關係資料
+        foreach (var relation in playerTeamRelations.Values)
+        {
+            var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+                INSERT OR IGNORE INTO tblPlayerTeam(playerId, teamId, seasonId, playerNumber, startDate, isActive)
+                VALUES(@playerId, @teamId, @seasonId, @playerNumber, @startDate, 1)";
+            cmd.Parameters.AddWithValue("@playerId", relation.playerId);
+            cmd.Parameters.AddWithValue("@teamId", relation.teamId);
+            cmd.Parameters.AddWithValue("@seasonId", relation.seasonId);
+            cmd.Parameters.AddWithValue("@playerNumber", relation.playerNumber ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@startDate", relation.date.ToString("yyyy-MM-dd"));
+            cmd.ExecuteNonQuery();
+        }
+
+        Console.WriteLine($"[OK] Inserted {playerTeamRelations.Count} records into tblPlayerTeam.");
     }
 
     /// <summary>
@@ -1874,7 +2043,6 @@ class Program
         Console.WriteLine($"[OK] Inserted {count} records into {tableName}.");
     }
 
-    // Overload for integer code tables (e.g., tblCodeBases)
     private static void InsertCodeTable(SqliteConnection conn, string tableName, Dictionary<int, string> data)
     {
         int count = 0;

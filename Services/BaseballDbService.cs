@@ -156,45 +156,6 @@ public class BaseballDbService : IBaseballDbService
         }
     }
 
-    // public async Task<BattingStats> CalculateBattingStatsAsync(string playerId, string? seasonId = null)
-    // {
-    //     try
-    //     {
-    //         var batterBoxes = await GetBatterBoxAsync(playerId, seasonId);
-
-    //         var stats = batterBoxes.Aggregate(new BattingStats
-    //         {
-    //             PlayerId = playerId
-    //         }, (acc, bb) =>
-    //         {
-    //             acc.PA += bb.PA ?? 0;
-    //             acc.AB += bb.AB ?? 0;
-    //             acc.R += bb.R ?? 0;
-    //             acc.H += bb.H ?? 0;
-    //             acc.RBI += bb.RBI ?? 0;
-    //             acc.TwoB += bb.TwoB ?? 0;
-    //             acc.ThreeB += bb.ThreeB ?? 0;
-    //             acc.HR += bb.HR ?? 0;
-    //             acc.BB += bb.BB ?? 0;
-    //             acc.SO += bb.SO ?? 0;
-    //             return acc;
-    //         });
-
-    //         // 計算衍生統計
-    //         if (stats.AB > 0)
-    //         {
-    //             stats.AVG = (double)stats.H / stats.AB;
-    //         }
-
-    //          return stats;
-    //     }
-    //     catch (Exception ex)
-    //     {
-    //         _logger.LogError(ex, "計算打擊統計時發生錯誤，playerId={PlayerId}", playerId);
-    //         return new BattingStats { PlayerId = playerId };
-    //     }
-    // }
-
     public async Task<IEnumerable<Batter>> GetAllBattersAsync(string? seasonId = null)
     {
         try
