@@ -38,107 +38,107 @@ public class BatterBox
     /// <summary>
     /// 球員ID
     /// </summary>
-    public string? PlayerId { get; set; }
+    public string PlayerId { get; set; } = string.Empty;
 
     /// <summary>
     /// 打席
     /// </summary>
-    public int? PA { get; set; }
+    public int PA { get; set; } = 0;
 
     /// <summary>
     /// 打數
     /// </summary>
-    public int? AB { get; set; }
+    public int AB { get; set; } = 0;
 
     /// <summary>
     /// 得分
     /// </summary>
-    public int? R { get; set; }
+    public int R { get; set; } = 0;
 
     /// <summary>
     /// 安打
     /// </summary>
-    public int? H { get; set; }
+    public int H { get; set; } = 0;
 
     /// <summary>
     /// 打點
     /// </summary>
-    public int? RBI { get; set; }
+    public int RBI { get; set; } = 0;
 
     /// <summary>
     /// 二壘安打
     /// </summary>
-    public int? TwoB { get; set; }
+    public int TwoB { get; set; } = 0;
 
     /// <summary>
     /// 三壘安打
     /// </summary>
-    public int? ThreeB { get; set; }
+    public int ThreeB { get; set; } = 0;
 
     /// <summary>
     /// 全壘打
     /// </summary>
-    public int? HR { get; set; }
+    public int HR { get; set; } = 0;
 
     /// <summary>
     /// 滾地雙殺
     /// </summary>
-    public int? GIDP { get; set; }
+    public int GIDP { get; set; } = 0;
 
     /// <summary>
     /// 雙殺打 (包含滾地雙殺)
     /// </summary>
-    public int? DP { get; set; }
+    public int DP { get; set; } = 0;
 
     /// <summary>
     /// 三殺打
     /// </summary>
-    public int? TP { get; set; }
+    public int TP { get; set; } = 0;
 
     /// <summary>
     /// 四壞 (包含故意四壞，不包含觸身球)
     /// </summary>
-    public int? BB { get; set; }
+    public int BB { get; set; } = 0;
 
     /// <summary>
     /// 故意四壞
     /// </summary>
-    public int? IBB { get; set; }
+    public int IBB { get; set; } = 0;
 
     /// <summary>
     /// 觸身球
     /// </summary>
-    public int? HBP { get; set; }
+    public int HBP { get; set; } = 0;
 
     /// <summary>
     /// 三振
     /// </summary>
-    public int? SO { get; set; }
+    public int SO { get; set; } = 0;
 
     /// <summary>
     /// 犧牲觸擊
     /// </summary>
-    public int? SH { get; set; }
+    public int SH { get; set; } = 0;
 
     /// <summary>
     /// 犧牲飛球
     /// </summary>
-    public int? SF { get; set; }
+    public int SF { get; set; } = 0;
 
     /// <summary>
     /// 失誤上壘
     /// </summary>
-    public int? E { get; set; }
+    public int E { get; set; } = 0;
 
     /// <summary>
     /// 盜壘成功
     /// </summary>
-    public int? SB { get; set; }
+    public int SB { get; set; } = 0;
 
     /// <summary>
     /// 盜壘失敗
     /// </summary>
-    public int? CS { get; set; }
+    public int CS { get; set; } = 0;
 
     // Navigation properties
     public Game? Game { get; set; }

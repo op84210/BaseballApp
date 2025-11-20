@@ -1,3 +1,4 @@
+﻿@model BaseballApp.Models.RankingsViewModel
 @{
     ViewData["Title"] = "排行榜";
 }
@@ -8,20 +9,20 @@
     <!-- 分類選擇 -->
     <ul class="nav nav-tabs mb-4">
         <li class="nav-item">
-            <a class="nav-link @(ViewBag.Category == "batting" ? "active" : "")" 
-               href="@Url.Action("Rankings", new { seasonId = ViewBag.SeasonId, category = "batting" })">
+            <a class="nav-link @(Model.Category == BaseballApp.Models.RankingCategory.Batting ? "active" : "")" 
+               href="@Url.Action(action: "Rankings", new { seasonId = Model.SeasonId, category = "batting" })">
                 打者排行榜
             </a>
         </li>
         <li class="nav-item">
-            <a class="nav-link @(ViewBag.Category == "pitching" ? "active" : "")" 
-               href="@Url.Action("Rankings", new { seasonId = ViewBag.SeasonId, category = "pitching" })">
+            <a class="nav-link @(Model.Category == BaseballApp.Models.RankingCategory.Pitching ? "active" : "")" 
+               href="@Url.Action(action: "Rankings", new { seasonId = Model.SeasonId, category = "pitching" })">
                 投手排行榜
             </a>
         </li>
     </ul>
 
-    @if (ViewBag.Category == "batting")
+    @if (Model.Category == BaseballApp.Models.RankingCategory.Batting)
     {
         <!-- 打者排行榜 -->
         <div class="card">
@@ -51,12 +52,12 @@
                             @{
                                 int rank = 1;
                             }
-                            @foreach (var player in ViewBag.Rankings)
+                            @foreach (BattingRankingItem player in Model.BattingRankings)
                             {
                                 <tr>
                                     <td>@rank</td>
                                     <td>
-                                        <a href="@Url.Action("PlayerDetail", new { playerId = player.PlayerId, seasonId = ViewBag.SeasonId })">
+                                        <a href="@Url.Action(action: "PlayerDetail", new { playerId = player.PlayerId, seasonId = Model.SeasonId })">
                                             @player.PlayerName
                                         </a>
                                     </td>
@@ -67,9 +68,9 @@
                                     <td>@player.RBI</td>
                                     <td>@player.SO</td>
                                     <td>@player.BB</td>
-                                    <td>@player.AVG.ToString("F3")</td>
-                                    <td>@player.OBP.ToString("F3")</td>
-                                    <td>@player.SLG.ToString("F3")</td>
+                                    <td>@player.AVG.ToString(format: "F3")</td>
+                                    <td>@player.OBP.ToString(format: "F3")</td>
+                                    <td>@player.SLG.ToString(format: "F3")</td>
                                 </tr>
                                 rank++;
                             }
@@ -108,24 +109,24 @@
                             @{
                                 int rank = 1;
                             }
-                            @foreach (var pitcher in ViewBag.Rankings)
+                            @foreach (PitchingRankingItem pitcher in Model.PitchingRankings)
                             {
                                 <tr>
                                     <td>@rank</td>
                                     <td>
-                                        <a href="@Url.Action("PlayerDetail", new { playerId = pitcher.PlayerId, seasonId = ViewBag.SeasonId })">
+                                        <a href="@Url.Action(action: "PlayerDetail", new { playerId = pitcher.PlayerId, seasonId = Model.SeasonId })">
                                             @pitcher.PlayerName
                                         </a>
                                     </td>
-                                    <td>@pitcher.IP.ToString("F1")</td>
+                                    <td>@pitcher.IP.ToString(format: "F1")</td>
                                     <td>@pitcher.H</td>
                                     <td>@pitcher.HR</td>
                                     <td>@pitcher.BB</td>
                                     <td>@pitcher.SO</td>
                                     <td>@pitcher.R</td>
                                     <td>@pitcher.ER</td>
-                                    <td>@pitcher.ERA.ToString("F2")</td>
-                                    <td>@pitcher.WHIP.ToString("F2")</td>
+                                    <td>@pitcher.ERA.ToString(format: "F2")</td>
+                                    <td>@pitcher.WHIP.ToString(format: "F2")</td>
                                 </tr>
                                 rank++;
                             }

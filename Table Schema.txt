@@ -22,7 +22,7 @@ season		String			賽事名稱
 
 tblTeam					    球隊資料
 teamId		String		PK	球隊ID
-team		String			球隊名稱
+teamName	String			球隊名稱
 
 
 

@@ -15,7 +15,15 @@ public class BaseballController : Controller
         _logger = logger;
     }
 
-    // 團隊列表頁面
+    /// <summary>
+    /// 團隊列表頁面
+    /// </summary>
+    /// <param name="seasonId">
+    /// 賽季識別碼，格式例如 "CPBL-2024-HE"
+    /// </param>
+    /// <returns>
+    /// 團隊列表頁面
+    /// </returns>
     public async Task<IActionResult> Teams(string? seasonId = null)
     {
         try
@@ -41,7 +49,18 @@ public class BaseballController : Controller
         }
     }
 
-    // 團隊詳細資訊頁面
+    /// <summary>
+    /// 團隊詳細資訊頁面
+    /// </summary>
+    /// <param name="teamId">
+    /// 球隊識別碼
+    /// </param>
+    /// <param name="seasonId">
+    /// 賽季識別碼，格式例如 "CPBL-2024-HE"
+    /// </param>
+    /// <returns>
+    /// 團隊詳細資訊頁面
+    /// </returns>
     public async Task<IActionResult> TeamDetail(string teamId, string? seasonId = null)
     {
         try
@@ -68,13 +87,13 @@ public class BaseballController : Controller
                     PlayerName = batters.FirstOrDefault(b => b.PlayerId == g.Key)?.PlayerName ?? "Unknown",
                     PlayerNumber = batters.FirstOrDefault(b => b.PlayerId == g.Key)?.PlayerNumber,
                     Games = g.Select(x => x.GameSeq).Distinct().Count(),
-                    PA = g.Sum(x => x.PA ?? 0),
-                    AB = g.Sum(x => x.AB ?? 0),
-                    H = g.Sum(x => x.H ?? 0),
-                    HR = g.Sum(x => x.HR ?? 0),
-                    RBI = g.Sum(x => x.RBI ?? 0),
-                    AVG = g.Sum(x => x.AB ?? 0) > 0 ? 
-                        Math.Round((decimal)g.Sum(x => x.H ?? 0) / g.Sum(x => x.AB ?? 0), 3) : 0
+                    PA = g.Sum(x => x.PA),
+                    AB = g.Sum(x => x.AB),
+                    H = g.Sum(x => x.H),
+                    HR = g.Sum(x => x.HR),
+                    RBI = g.Sum(x => x.RBI),
+                    AVG = g.Sum(x => x.AB) > 0 ? 
+                        Math.Round((decimal)g.Sum(x => x.H) / g.Sum(x => x.AB), 3) : 0
                 })
                 .OrderByDescending(x => x.H)
                 .ToList();
@@ -92,7 +111,7 @@ public class BaseballController : Controller
                     PlayerNumber = pitchers.FirstOrDefault(p => p.PlayerId == g.Key)?.PlayerNumber,
                     Games = g.Select(x => x.GameSeq).Distinct().Count(),
                     IPOuts = g.Sum(x => x.IPOuts ?? 0),
-                    IP = Math.Round((decimal)(g.Sum(x => x.IPOuts ?? 0)) / 3, 1),
+                    IP = (decimal)(g.Sum(x => x.IPOuts ?? 0) / 3) + (decimal)(g.Sum(x => x.IPOuts ?? 0) % 3) / 10m,
                     H = g.Sum(x => x.H ?? 0),
                     HR = g.Sum(x => x.HR ?? 0),
                     BB = g.Sum(x => x.BB ?? 0),
@@ -118,7 +137,18 @@ public class BaseballController : Controller
         }
     }
 
-    // 球員列表頁面
+    /// <summary>
+    /// 球員列表頁面
+    /// </summary>
+    /// <param name="seasonId">
+    /// 賽季識別碼，格式例如 "CPBL-2024-HE"
+    /// </param>
+    /// <param name="teamId">
+    /// 球隊識別碼
+    /// </param>
+    /// <returns>
+    /// 球員列表頁面
+    /// </returns>
     public async Task<IActionResult> Players(string? seasonId = null, string? teamId = null)
     {
         try
@@ -142,7 +172,18 @@ public class BaseballController : Controller
         }
     }
 
-    // 球員詳細資訊頁面
+    /// <summary>
+    /// 球員詳細資訊頁面
+    /// </summary>
+    /// <param name="playerId">
+    /// 球員識別碼
+    /// </param>
+    /// <param name="seasonId">
+    /// 賽季識別碼，格式例如 "CPBL-2024-HE"
+    /// </param>
+    /// <returns>
+    /// 球員詳細資訊頁面
+    /// </returns>
     public async Task<IActionResult> PlayerDetail(string playerId, string? seasonId = null)
     {
         try
@@ -215,95 +256,106 @@ public class BaseballController : Controller
             return View("Error");
         }
     }
-
-    // 排行榜頁面
+  
+    /// <summary>
+    /// 排行榜頁面
+    /// </summary>
+    /// <param name="seasonId">
+    /// 賽季識別碼，格式例如 "CPBL-2024-HE"
+    /// </param>
+    /// <param name="category">
+    /// 排行榜類別，"batting" 或 "pitching"
+    /// </param>
+    /// <returns>
+    /// 排行榜頁面
+    /// </returns>
     public async Task<IActionResult> Rankings(string? seasonId = null, string category = "batting")
     {
         try
         {
             seasonId ??= "CPBL-2024-HE";
-
-            if (category == "batting")
+            var vm = new RankingsViewModel
             {
-                // 打擊排行榜
+                SeasonId = seasonId,
+                Category = category == "pitching" ? RankingCategory.Pitching : RankingCategory.Batting
+            };
+
+            if (vm.Category == RankingCategory.Batting)
+            {
                 var topBatters = await _baseballDbService.GetTopBattersAsync(seasonId, 50);
-                
-                var rankings = topBatters.Select((b, index) => new
+                var batters = await _baseballDbService.GetAllBattersAsync(seasonId);
+
+                var battingRankings = topBatters.Select((b, index) =>
                 {
-                    Rank = index + 1,
-                    PlayerName = b.PlayerName,
-                    Games = b.PlateAppearances / 4, // 估算場次
-                    PA = b.PlateAppearances,
-                    AB = b.AtBats,
-                    H = b.Hits,
-                    Doubles = b.Doubles,
-                    Triples = b.Triples,
-                    HR = b.HomeRuns,
-                    RBI = b.RBIs,
-                    BB = b.Walks,
-                    SO = b.Strikeouts,
-                    AVG = b.AtBats > 0 ? Math.Round((decimal)b.Hits / b.AtBats, 3) : 0,
-                    OBP = (b.AtBats + b.Walks) > 0 ? 
-                        Math.Round((decimal)(b.Hits + b.Walks) / (b.AtBats + b.Walks), 3) : 0,
-                    SLG = b.AtBats > 0 ? 
-                        Math.Round((decimal)(b.Hits + b.Doubles + b.Triples * 2 + b.HomeRuns * 3) / b.AtBats, 3) : 0
+                    var playerId = batters.FirstOrDefault(x => x.PlayerName == b.PlayerName)?.PlayerId;
+                    return new BattingRankingItem
+                    {
+                        Rank = index + 1,
+                        PlayerId = playerId,
+                        PlayerName = b.PlayerName,
+                        Games = b.Games,
+                        PA = b.PlateAppearances,
+                        AB = b.AtBats,
+                        H = b.Hits,
+                        HR = b.HomeRuns,
+                        RBI = b.RBIs,
+                        BB = b.Walks,
+                        SO = b.Strikeouts,
+                        AVG = b.AtBats > 0 ? Math.Round((decimal)b.Hits / b.AtBats, 3) : 0,
+                        OBP = (b.AtBats + b.Walks) > 0 ? Math.Round((decimal)(b.Hits + b.Walks) / (b.AtBats + b.Walks), 3) : 0,
+                        SLG = b.AtBats > 0 ? Math.Round((decimal)(b.Hits + b.Doubles + b.Triples * 2 + b.HomeRuns * 3) / b.AtBats, 3) : 0
+                    };
                 }).ToList();
 
-                ViewBag.Rankings = rankings;
+                vm.BattingRankings = battingRankings;
             }
-            else if (category == "pitching")
+            else
             {
-                // 投手排行榜
                 var pitchers = await _baseballDbService.GetAllPitchersAsync(seasonId);
                 var pitcherBoxes = await _baseballDbService.GetPitcherBoxAsync(seasonId: seasonId);
-                
-                var topPitchers = pitcherBoxes
+
+                var pitchingRankings = pitcherBoxes
                     .GroupBy(pb => pb.PlayerId)
                     .Select(g => new
                     {
                         PlayerId = g.Key,
                         PlayerName = pitchers.FirstOrDefault(p => p.PlayerId == g.Key)?.PlayerName ?? "Unknown",
-                        PlayerNumber = pitchers.FirstOrDefault(p => p.PlayerId == g.Key)?.PlayerNumber,
                         Games = g.Select(x => x.GameSeq).Distinct().Count(),
                         IPOuts = g.Sum(x => x.IPOuts ?? 0),
-                        IP = Math.Round((decimal)(g.Sum(x => x.IPOuts ?? 0)) / 3, 1),
+                        IP = (decimal)(g.Sum(x => x.IPOuts ?? 0) / 3) + (decimal)(g.Sum(x => x.IPOuts ?? 0) % 3) / 10m,
                         H = g.Sum(x => x.H ?? 0),
                         HR = g.Sum(x => x.HR ?? 0),
                         BB = g.Sum(x => x.BB ?? 0),
                         SO = g.Sum(x => x.SO ?? 0),
+                        R = g.Sum(x => x.R ?? 0),
                         ER = g.Sum(x => x.ER ?? 0),
-                        ERA = g.Sum(x => x.IPOuts ?? 0) > 0 ? 
-                            Math.Round((decimal)g.Sum(x => x.ER ?? 0) * 27 / g.Sum(x => x.IPOuts ?? 0), 2) : 0,
-                        WHIP = g.Sum(x => x.IPOuts ?? 0) > 0 ? 
-                            Math.Round((decimal)(g.Sum(x => x.H ?? 0) + g.Sum(x => x.BB ?? 0)) * 3 / g.Sum(x => x.IPOuts ?? 0), 2) : 0
+                        ERA = g.Sum(x => x.IPOuts ?? 0) > 0 ? Math.Round((decimal)g.Sum(x => x.ER ?? 0) * 27 / g.Sum(x => x.IPOuts ?? 0), 2) : 0,
+                        WHIP = g.Sum(x => x.IPOuts ?? 0) > 0 ? Math.Round((decimal)(g.Sum(x => x.H ?? 0) + g.Sum(x => x.BB ?? 0)) * 3 / g.Sum(x => x.IPOuts ?? 0), 2) : 0
                     })
                     .OrderBy(x => x.ERA)
                     .Take(50)
-                    .Select((p, index) => new
+                    .Select((p, index) => new PitchingRankingItem
                     {
                         Rank = index + 1,
-                        p.PlayerId,
-                        p.PlayerName,
-                        p.PlayerNumber,
-                        p.Games,
-                        p.IP,
-                        p.H,
-                        p.HR,
-                        p.BB,
-                        p.SO,
-                        p.ER,
-                        p.ERA,
-                        p.WHIP
+                        PlayerId = p.PlayerId,
+                        PlayerName = p.PlayerName,
+                        Games = p.Games,
+                        IP = p.IP,
+                        H = p.H,
+                        HR = p.HR,
+                        BB = p.BB,
+                        SO = p.SO,
+                        R = p.R,
+                        ER = p.ER,
+                        ERA = p.ERA,
+                        WHIP = p.WHIP
                     })
                     .ToList();
 
-                ViewBag.Rankings = topPitchers;
+                vm.PitchingRankings = pitchingRankings;
             }
 
-            ViewBag.SeasonId = seasonId;
-            ViewBag.Category = category;
-            
-            return View();
+            return View(vm);
         }
         catch (Exception ex)
         {

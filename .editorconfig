@@ -1,0 +1,4 @@
+[*.cs]
+
+# CS8629: 可為 Null 的實值型別可為 Null。
+dotnet_diagnostic.CS8629.severity = none

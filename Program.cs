@@ -56,7 +56,7 @@ app.MapStaticAssets();
 
 app.MapControllerRoute(
     name: "default",
-    pattern: "{controller=Home}/{action=Index}/{id?}")
+    pattern: "{controller=Baseball}/{action=Rankings}/{id?}")
     .WithStaticAssets();
 
 app.MapControllers(); // 映射 /api/*

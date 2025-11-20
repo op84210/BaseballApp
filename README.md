@@ -57,8 +57,6 @@ BaseballApp/
 │   └── HomeController.cs
 ├── Models/              # 數據模型
 ├── Views/               # Razor 視圖
-│   ├── Home/
-│   │   └── Index.cshtml
 │   └── Shared/             # 共用視圖
 ├── wwwroot/             # 靜態資源
 │   ├── css/

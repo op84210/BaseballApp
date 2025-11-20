@@ -227,7 +227,7 @@ class Program
             -- tblTeam
             CREATE TABLE IF NOT EXISTS tblTeam (
                 teamId TEXT PRIMARY KEY,
-                team TEXT NOT NULL
+                teamName TEXT NOT NULL
             );
         ";
 
@@ -753,7 +753,7 @@ class Program
         foreach (var team in teams.Distinct())
         {
             var insTeam = conn.CreateCommand();
-            insTeam.CommandText = "INSERT OR IGNORE INTO tblTeam(teamId,team) VALUES (@tid,@tname)";
+            insTeam.CommandText = "INSERT OR IGNORE INTO tblTeam(teamId,teamName) VALUES (@tid,@tname)";
             insTeam.Parameters.AddWithValue("@tid", team.TeamId);
             insTeam.Parameters.AddWithValue("@tname", team.TeamName);
             insTeam.ExecuteNonQuery();
@@ -1556,26 +1556,26 @@ class Program
             cmd.Parameters.AddWithValue("@order", box.Order);
             cmd.Parameters.AddWithValue("@subOrder", box.SubOrder);
             cmd.Parameters.AddWithValue("@pid", box.PlayerId ?? (object)DBNull.Value);
-            cmd.Parameters.AddWithValue("@PA", box.PA ?? (object)DBNull.Value);
-            cmd.Parameters.AddWithValue("@AB", box.AB ?? (object)DBNull.Value);
-            cmd.Parameters.AddWithValue("@R", box.R ?? (object)DBNull.Value);
-            cmd.Parameters.AddWithValue("@H", box.H ?? (object)DBNull.Value);
-            cmd.Parameters.AddWithValue("@RBI", box.RBI ?? (object)DBNull.Value);
-            cmd.Parameters.AddWithValue("@TwoB", box.TwoB ?? (object)DBNull.Value);
-            cmd.Parameters.AddWithValue("@ThreeB", box.ThreeB ?? (object)DBNull.Value);
-            cmd.Parameters.AddWithValue("@HR", box.HR ?? (object)DBNull.Value);
-            cmd.Parameters.AddWithValue("@GIDP", box.GIDP ?? (object)DBNull.Value);
-            cmd.Parameters.AddWithValue("@DP", box.DP ?? (object)DBNull.Value);
-            cmd.Parameters.AddWithValue("@TP", box.TP ?? (object)DBNull.Value);
-            cmd.Parameters.AddWithValue("@BB", box.BB ?? (object)DBNull.Value);
-            cmd.Parameters.AddWithValue("@IBB", box.IBB ?? (object)DBNull.Value);
-            cmd.Parameters.AddWithValue("@HBP", box.HBP ?? (object)DBNull.Value);
-            cmd.Parameters.AddWithValue("@SO", box.SO ?? (object)DBNull.Value);
-            cmd.Parameters.AddWithValue("@SH", box.SH ?? (object)DBNull.Value);
-            cmd.Parameters.AddWithValue("@SF", box.SF ?? (object)DBNull.Value);
-            cmd.Parameters.AddWithValue("@E", box.E ?? (object)DBNull.Value);
-            cmd.Parameters.AddWithValue("@SB", box.SB ?? (object)DBNull.Value);
-            cmd.Parameters.AddWithValue("@CS", box.CS ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@PA", box.PA );
+            cmd.Parameters.AddWithValue("@AB", box.AB );
+            cmd.Parameters.AddWithValue("@R", box.R );
+            cmd.Parameters.AddWithValue("@H", box.H );
+            cmd.Parameters.AddWithValue("@RBI", box.RBI);
+            cmd.Parameters.AddWithValue("@TwoB", box.TwoB);
+            cmd.Parameters.AddWithValue("@ThreeB", box.ThreeB);
+            cmd.Parameters.AddWithValue("@HR", box.HR);
+            cmd.Parameters.AddWithValue("@GIDP", box.GIDP);
+            cmd.Parameters.AddWithValue("@DP", box.DP);
+            cmd.Parameters.AddWithValue("@TP", box.TP);
+            cmd.Parameters.AddWithValue("@BB", box.BB);
+            cmd.Parameters.AddWithValue("@IBB", box.IBB);
+            cmd.Parameters.AddWithValue("@HBP", box.HBP);
+            cmd.Parameters.AddWithValue("@SO", box.SO);
+            cmd.Parameters.AddWithValue("@SH", box.SH);
+            cmd.Parameters.AddWithValue("@SF", box.SF);
+            cmd.Parameters.AddWithValue("@E", box.E);
+            cmd.Parameters.AddWithValue("@SB", box.SB);
+            cmd.Parameters.AddWithValue("@CS", box.CS);
 
             cmd.ExecuteNonQuery();
         }
@@ -1806,7 +1806,7 @@ class Program
                 HomeOrAway = homeOrAway,
                 Order = order,
                 SubOrder = subOrder,
-                PlayerId = GetString(bat, "playerId"),
+                PlayerId = GetString(bat, "playerId") ?? "",
                 PA = GetInt(bat, "PA"),
                 AB = GetInt(bat, "AB"),
                 R = GetInt(bat, "R"),

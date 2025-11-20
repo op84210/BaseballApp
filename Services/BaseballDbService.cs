@@ -1,6 +1,7 @@
 using BaseballApp.Data;
 using BaseballApp.Models;
 using Microsoft.EntityFrameworkCore;
+using SQLitePCL;
 
 namespace BaseballApp.Services;
 
@@ -84,6 +85,18 @@ public class BaseballDbService : IBaseballDbService
         }
     }
 
+    /// <summary>
+    /// 取得投手資料，並可依球員編號及賽季篩選
+    /// </summary>
+    /// <param name="playerId">
+    /// 球員編號
+    /// </param>
+    /// <param name="seasonId">
+    /// 賽季識別碼，格式例如 "CPBL-2024-HE"
+    /// </param>
+    /// <returns>
+    /// 所有投手資料的集合
+    /// </returns>
     public async Task<IEnumerable<PitcherBox>> GetPitcherBoxAsync(string? playerId = null, string? seasonId = null)
     {
         try
@@ -156,6 +169,15 @@ public class BaseballDbService : IBaseballDbService
         }
     }
 
+    /// <summary>
+    /// 取得所有打者資料，並可依賽季篩選
+    /// </summary>
+    /// <param name="seasonId">
+    /// 賽季識別碼，格式例如 "CPBL-2024-HE"
+    /// </param>
+    /// <returns>
+    /// 所有打者資料的集合
+    /// </returns>
     public async Task<IEnumerable<Batter>> GetAllBattersAsync(string? seasonId = null)
     {
         try
@@ -165,12 +187,24 @@ public class BaseballDbService : IBaseballDbService
                 return await _context.Batters.ToListAsync();
             }
 
-            // ?��?賽季篩選：�?得該賽季?�出賽�??�員
-            var batterIds = await _context.BatterBoxes
-                .Where(bb => bb.SeasonId == seasonId)
-                .Select(bb => bb.PlayerId)
-                .Distinct()
-                .ToListAsync();
+            List<string> batterIds = new List<string>();
+
+            // 依據賽季篩選：取得該賽季有出賽的打者
+            if (seasonId != null)
+            {
+                batterIds = await _context.BatterBoxes
+                    .Where(bb => bb.SeasonId == seasonId)
+                    .Select(bb => bb.PlayerId)
+                    .Where(id => id != null)
+                    .Distinct()
+                    .ToListAsync();
+            }
+            else
+            {
+                batterIds = await _context.Batters
+                    .Select(b => b.PlayerId)
+                    .ToListAsync();
+            }
 
             return await _context.Batters
                 .Where(b => batterIds.Contains(b.PlayerId))
@@ -178,11 +212,20 @@ public class BaseballDbService : IBaseballDbService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "讀?��??��??��??��??�誤");
+            _logger.LogError(ex, "讀取打者資料時發生錯誤");
             return Enumerable.Empty<Batter>();
         }
     }
 
+    /// <summary>
+    /// 取得所有投手資料，並可依賽季篩選
+    /// </summary>
+    /// <param name="seasonId">
+    /// 賽季識別碼，格式例如 "CPBL-2024-HE"
+    /// </param>
+    /// <returns>
+    /// 所有投手資料的集合
+    /// </returns>
     public async Task<IEnumerable<Pitcher>> GetAllPitchersAsync(string? seasonId = null)
     {
         try
@@ -192,7 +235,7 @@ public class BaseballDbService : IBaseballDbService
                 return await _context.Pitchers.ToListAsync();
             }
 
-            // ?��?賽季篩選：�?得該賽季?�出賽�??��?
+            // 依賽季篩選：取得該賽季有出賽的投手
             var pitcherIds = await _context.PitcherBoxes
                 .Where(pb => pb.SeasonId == seasonId)
                 .Select(pb => pb.PlayerId)
@@ -205,7 +248,7 @@ public class BaseballDbService : IBaseballDbService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "讀?��??��??��??��??�誤");
+            _logger.LogError(ex, "讀取投手資料時發生錯誤");
             return Enumerable.Empty<Pitcher>();
         }
     }
@@ -267,20 +310,38 @@ public class BaseballDbService : IBaseballDbService
     /// <summary>
     /// 取得指定賽季的前 N 名打者
     /// </summary>
-    /// <param name="seasonId"></param>
-    /// <param name="topN"></param>
-    /// <returns></returns>
+    /// <param name="seasonId">
+    /// 賽季編號，可為 null，表示計算整個職業生涯的數據
+    /// </param>
+    /// <param name="topN">
+    /// 要取得的前 N 名打者數量
+    /// </param>
+    /// <returns>
+    /// 打者打擊數據集合
+    /// </returns>
     public async Task<IEnumerable<BattingStats>> GetTopBattersAsync(string? seasonId = null, int topN = 10)
     {
         try
         {
-            //暫時不實作
+            // 儲存所有打者的打擊數據
             List<BattingStats> allStats = [];
-            return allStats;
+
+            // 取得所有打者
+            var batters = await GetAllBattersAsync(seasonId);
+
+            // 計算每位打者的打擊數據
+            foreach (var batter in batters)
+            {
+                var stats = await CalculateBattingStatsAsync(batter.PlayerId, seasonId);
+                allStats.Add(stats);
+            }
+
+            // 依安打數排序並取前 N 名
+            return allStats.OrderByDescending(s => s.Hits).Take(topN);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "取得前 N 名打者資料時發生錯誤");
+            _logger.LogError(ex, $"取得前 {topN} 名打者資料時發生錯誤");
             return Enumerable.Empty<BattingStats>();
         }
     }
@@ -302,8 +363,94 @@ public class BaseballDbService : IBaseballDbService
         }
     }
 
-    public Task<BattingStats> CalculateBattingStatsAsync(string playerId, string? seasonId = null)
+    /// <summary>
+    /// 計算指定打者在指定賽季的打擊數據
+    /// </summary>
+    /// <param name="playerId">
+    /// 打者編號
+    /// </param>
+    /// <param name="seasonId">
+    /// 賽季編號，可為 null，表示計算整個職業生涯的數據
+    /// </param>
+    /// <returns>
+    /// 打擊數據物件
+    /// </returns>
+    public async Task<BattingStats> CalculateBattingStatsAsync(string playerId, string? seasonId = null)
     {
-        throw new NotImplementedException();
+        // 取得基本資料（改為分段查詢避免複雜 LEFT JOIN 造成 SQLite 翻譯異常）
+        var batter = await _context.Batters
+            .Where(b => b.PlayerId == playerId)
+            .FirstOrDefaultAsync();
+
+        var playerTeam = await _context.PlayerTeams
+            .Where(pt => pt.PlayerId == playerId && pt.IsActive && (seasonId == null || pt.SeasonId == seasonId))
+            .OrderByDescending(pt => pt.StartDate)
+            .FirstOrDefaultAsync();
+
+        string? teamName = null;
+        string? seasonName = null;
+        if (playerTeam != null)
+        {
+            teamName = await _context.Teams
+                .Where(t => t.TeamId == playerTeam.TeamId)
+                .Select(t => t.TeamName)
+                .FirstOrDefaultAsync();
+
+            seasonName = await _context.Seasons
+                .Where(s => s.SeasonId == playerTeam.SeasonId)
+                .Select(s => s.SeasonName)
+                .FirstOrDefaultAsync();
+        }
+
+        // 取得打擊數據
+        List<BatterBox> batterBoxes = await _context.BatterBoxes
+            .Where(bb => bb.PlayerId == playerId && (seasonId == null || bb.SeasonId == seasonId))
+            .ToListAsync();
+
+        // 初始化打擊數據
+        BattingStats stats = new BattingStats
+        {
+            PlayerName =  batter?.PlayerName ?? "未知球員",
+            Team = teamName ?? "未知球隊",
+            Games = 0,
+            PlateAppearances = 0,
+            AtBats = 0,
+            Hits = 0,
+            Doubles = 0,
+            Triples = 0,
+            HomeRuns = 0,
+            RBIs = 0,
+            Runs = 0,
+            StolenBases = 0,
+            CaughtStealing = 0,
+            Walks = 0,
+            Strikeouts = 0,
+            Season = seasonId ?? seasonName ?? "生涯"
+        };
+
+        // 累計打擊數據
+        foreach (BatterBox box in batterBoxes)
+        {
+            stats.PlateAppearances += 1;
+            stats.AtBats += box.AB;
+            stats.Hits += box.H;
+            stats.Doubles += box.TwoB;
+            stats.Triples += box.ThreeB;
+            stats.HomeRuns += box.HR;
+            stats.RBIs += box.RBI;
+            stats.Runs += box.R;
+            stats.StolenBases += box.SB;
+            stats.CaughtStealing += box.CS;
+            stats.Walks += box.BB;
+            stats.Strikeouts += box.SO;
+        }
+
+        // 以打擊盒資料計算出賽（不同比賽場次數）
+        stats.Games = batterBoxes
+            .Select(bb => bb.GameSeq)
+            .Distinct()
+            .Count();
+
+        return stats;
     }
 }

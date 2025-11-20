@@ -15,6 +15,7 @@ public class BaseballDbContext : DbContext
     public DbSet<Stadium> Stadiums { get; set; }
     public DbSet<Batter> Batters { get; set; }
     public DbSet<Pitcher> Pitchers { get; set; }
+    public DbSet<PlayerTeam> PlayerTeams { get; set; }
 
     // 比賽相關資料表
     public DbSet<Game> Games { get; set; }
@@ -78,6 +79,21 @@ public class BaseballDbContext : DbContext
             entity.Property(e => e.PlayerNumber).HasColumnName("playerNumber");
         });
 
+        // tblPlayerTeam
+        modelBuilder.Entity<PlayerTeam>(entity =>
+        {
+            entity.ToTable("tblPlayerTeam");
+            entity.HasKey(e => new { e.Id });
+            entity.Property(e => e.Id).HasColumnName("id").ValueGeneratedOnAdd();
+            entity.Property(e => e.PlayerId).HasColumnName("playerId");
+            entity.Property(e => e.TeamId).HasColumnName("teamId");
+            entity.Property(e => e.SeasonId).HasColumnName("seasonId");
+            entity.Property(e => e.PlayerNumber).HasColumnName("playerNumber");
+            entity.Property(e => e.StartDate).HasColumnName("startDate");
+            entity.Property(e => e.EndDate).HasColumnName("endDate");
+            entity.Property(e => e.IsActive).HasColumnName("isActive");
+        });
+
         // tblGame
         modelBuilder.Entity<Game>(entity =>
         {
@@ -135,6 +151,19 @@ public class BaseballDbContext : DbContext
             entity.Property(e => e.E).HasColumnName("E");
             entity.Property(e => e.SB).HasColumnName("SB");
             entity.Property(e => e.CS).HasColumnName("CS");
+
+            // 關聯關係：BatterBox -> Game (複合鍵)
+            entity.HasOne(bb => bb.Game)
+                .WithMany()
+                .HasForeignKey(bb => new { bb.SeasonId, bb.GameSeq })
+                .HasPrincipalKey(g => new { g.SeasonId, g.Seq })
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // 關聯關係：BatterBox -> Batter
+            entity.HasOne(bb => bb.Player)
+                .WithMany()
+                .HasForeignKey(bb => bb.PlayerId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         // tblPitcherBox
@@ -159,6 +188,19 @@ public class BaseballDbContext : DbContext
             entity.Property(e => e.SO).HasColumnName("SO");
             entity.Property(e => e.R).HasColumnName("R");
             entity.Property(e => e.ER).HasColumnName("ER");
+
+            // 關聯關係：PitcherBox -> Game (複合鍵)
+            entity.HasOne(pb => pb.Game)
+                .WithMany()
+                .HasForeignKey(pb => new { pb.SeasonId, pb.GameSeq })
+                .HasPrincipalKey(g => new { g.SeasonId, g.Seq })
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // 關聯關係：PitcherBox -> Pitcher
+            entity.HasOne(pb => pb.Player)
+                .WithMany()
+                .HasForeignKey(pb => pb.PlayerId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         // tblPA
@@ -175,12 +217,15 @@ public class BaseballDbContext : DbContext
             entity.Property(e => e.BatterId).HasColumnName("batterId");
             entity.Property(e => e.PitcherId).HasColumnName("pitcherId");
             entity.Property(e => e.CatcherId).HasColumnName("catcherId");
-            //entity.Property(e => e.PaResult).HasColumnName("paResult");
-            //entity.Property(e => e.OutOrNot).HasColumnName("outOrNot");
             entity.Property(e => e.Bases).HasColumnName("bases");
             entity.Property(e => e.EndBases).HasColumnName("endBases");
-            // entity.Property(e => e.Score).HasColumnName("score");
-            // entity.Property(e => e.Wpa).HasColumnName("wpa");
+
+            // 關聯關係：PA -> Game (複合鍵)
+            entity.HasOne<Game>()
+                .WithMany()
+                .HasForeignKey(pa => new { pa.SeasonId, pa.GameSeq })
+                .HasPrincipalKey(g => new { g.SeasonId, g.Seq })
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         // tblEvent
@@ -190,16 +235,17 @@ public class BaseballDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").ValueGeneratedOnAdd();
             entity.Property(e => e.PaId).HasColumnName("paId");
-            // entity.Property(e => e.EventSeq).HasColumnName("eventSeq");
-            // entity.Property(e => e.EventType).HasColumnName("eventType");
             entity.Property(e => e.PitchCode).HasColumnName("pitchCode");
             entity.Property(e => e.PitchType).HasColumnName("pitchType");
-            //entity.Property(e => e.Result).HasColumnName("result");
             entity.Property(e => e.Velocity).HasColumnName("velocity");
-            // entity.Property(e => e.Hardness).HasColumnName("hardness");
-            // entity.Property(e => e.Trajectory).HasColumnName("trajectory");
             entity.Property(e => e.CoordX).HasColumnName("coordX");
             entity.Property(e => e.CoordY).HasColumnName("coordY");
+
+            // 關聯關係：Event -> PA
+            entity.HasOne<PA>()
+                .WithMany()
+                .HasForeignKey(e => e.PaId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         // tblRunner
@@ -208,11 +254,7 @@ public class BaseballDbContext : DbContext
             entity.ToTable("tblRunner");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").ValueGeneratedOnAdd();
-            //entity.Property(e => e.PaId).HasColumnName("paId");
             entity.Property(e => e.RunnerId).HasColumnName("runnerId");
-            // entity.Property(e => e.RunnerType).HasColumnName("runnerType");
-            // entity.Property(e => e.StartBase).HasColumnName("startBase");
-            // entity.Property(e => e.EndBase).HasColumnName("endBase");
         });
     }
 }

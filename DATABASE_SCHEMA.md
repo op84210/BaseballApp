@@ -91,7 +91,7 @@
 | 欄位名稱 | 型別 | 約束 | 說明 | 備註 |
 |---------|------|------|------|------|
 | teamId | String | PK | 球隊ID | |
-| team | String | | 球隊名稱 | |
+| teamName | String | | 球隊名稱 | |
 
 #### tblBatter - 球員資料_打者
 
