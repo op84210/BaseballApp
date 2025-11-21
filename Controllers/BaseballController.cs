@@ -188,7 +188,11 @@ public class BaseballController : Controller
     {
         try
         {
-            seasonId ??= "CPBL-2024-HE";
+            // 支援全部賽季：傳入 ALL 代表生涯統計
+            if (seasonId == "ALL")
+            {
+                seasonId = null; // 使用 null 表示生涯
+            }
 
             var batters = await _baseballDbService.GetAllBattersAsync(seasonId);
             var player = batters.FirstOrDefault(b => b.PlayerId == playerId);
@@ -198,9 +202,11 @@ public class BaseballController : Controller
                 return NotFound();
             }
 
-            // 取得球員打席記錄
+            // 取得球員打席記錄（ALL 代表使用全部賽季資料）
             var paList = await _baseballDbService.GetPAAsync(batterId: playerId);
-            var seasonPAs = paList.Where(pa => pa.SeasonId == seasonId).ToList();
+            var seasonPAs = seasonId == null
+                ? paList.ToList()
+                : paList.Where(pa => pa.SeasonId == seasonId).ToList();
 
             // 計算統計數據
             var stats = new
@@ -256,7 +262,41 @@ public class BaseballController : Controller
             return View("Error");
         }
     }
-  
+
+    /// <summary>
+    /// 初始化排行榜 ViewModel
+    /// </summary>
+    /// <param name="seasonId">
+    /// 賽季識別碼，格式例如 "CPBL-2024-HE"
+    /// </param>
+    /// <param name="category">
+    /// 排行榜類別，"batting" 或 "pitching"
+    /// </param>
+    /// <returns>
+    /// 初始化後的 RankingsViewModel
+    /// </returns>
+    private async Task<RankingsViewModel> initializeRankingViewModel(string seasonId, string category)
+    {
+        var vm = new RankingsViewModel
+        {
+            SeasonId = seasonId,
+            Category = category == "pitching" ? RankingCategory.Pitching : RankingCategory.Batting
+        };
+
+        // 讀取賽季資料並插入 "ALL" 選項於最前
+        var seasons = await _baseballDbService.GetAllSeasonsAsync();
+        vm.Seasons = seasons
+            .OrderByDescending(s => s.SeasonId)
+            .ToList();
+        vm.Seasons.Insert(0, new Season { SeasonId = "ALL", SeasonName = "全部賽季" });
+
+        // 計算門檻：單季 -> 打席 >= 120 * 3.1；投手局數 >= 120。全部賽季不設門檻。
+        vm.MinQualifiedPA = seasonId != "CPBL-2024-xa" ? 0 : (int)Math.Ceiling(120 * 3.1m);
+        vm.MinQualifiedIP = seasonId != "CPBL-2024-xa" ? 0 : 120; // 以整數局為門檻
+
+        return vm;
+    }
+
     /// <summary>
     /// 排行榜頁面
     /// </summary>
@@ -269,52 +309,53 @@ public class BaseballController : Controller
     /// <returns>
     /// 排行榜頁面
     /// </returns>
-    public async Task<IActionResult> Rankings(string? seasonId = null, string category = "batting")
+    public async Task<IActionResult> Rankings(string seasonId = "ALL", string category = "batting")
     {
         try
         {
-            seasonId ??= "CPBL-2024-HE";
-            var vm = new RankingsViewModel
-            {
-                SeasonId = seasonId,
-                Category = category == "pitching" ? RankingCategory.Pitching : RankingCategory.Batting
-            };
+            // 初始化 ViewModel
+            var vm = await initializeRankingViewModel(seasonId, category);
 
             if (vm.Category == RankingCategory.Batting)
             {
-                var topBatters = await _baseballDbService.GetTopBattersAsync(seasonId, 50);
-                var batters = await _baseballDbService.GetAllBattersAsync(seasonId);
-
-                var battingRankings = topBatters.Select((b, index) =>
+                // 重新計算所有打者統計，避免門檻過濾後不足 50 名
+                var batterEntities = await _baseballDbService.GetAllBattersAsync(seasonId);
+                List<BattingStats> allStats = new();
+                foreach (var batter in batterEntities)
                 {
-                    var playerId = batters.FirstOrDefault(x => x.PlayerName == b.PlayerName)?.PlayerId;
-                    return new BattingRankingItem
-                    {
-                        Rank = index + 1,
-                        PlayerId = playerId,
-                        PlayerName = b.PlayerName,
-                        Games = b.Games,
-                        PA = b.PlateAppearances,
-                        AB = b.AtBats,
-                        H = b.Hits,
-                        HR = b.HomeRuns,
-                        RBI = b.RBIs,
-                        BB = b.Walks,
-                        SO = b.Strikeouts,
-                        AVG = b.AtBats > 0 ? Math.Round((decimal)b.Hits / b.AtBats, 3) : 0,
-                        OBP = (b.AtBats + b.Walks) > 0 ? Math.Round((decimal)(b.Hits + b.Walks) / (b.AtBats + b.Walks), 3) : 0,
-                        SLG = b.AtBats > 0 ? Math.Round((decimal)(b.Hits + b.Doubles + b.Triples * 2 + b.HomeRuns * 3) / b.AtBats, 3) : 0
-                    };
-                }).ToList();
+                    var stats = await _baseballDbService.CalculateBattingStatsAsync(batter.PlayerId, seasonId);
+                    allStats.Add(stats);
+                }
+                var qualified = allStats
+                    .Where(s => s.PlateAppearances >= vm.MinQualifiedPA)
+                    .OrderByDescending(s => s.Hits)
+                    .ToList();
+                vm.TotalQualifiedBatters = qualified.Count;
 
+                var battingRankings = qualified.Select((b, index) => new BattingRankingItem
+                {
+                    Rank = index + 1,
+                    PlayerId = batterEntities.FirstOrDefault(x => x.PlayerName == b.PlayerName)?.PlayerId,
+                    PlayerName = b.PlayerName,
+                    Games = b.Games,
+                    PA = b.PlateAppearances,
+                    AB = b.AtBats,
+                    H = b.Hits,
+                    HR = b.HomeRuns,
+                    RBI = b.RBIs,
+                    BB = b.Walks,
+                    SO = b.Strikeouts,
+                    AVG = b.AtBats > 0 ? Math.Round((decimal)b.Hits / b.AtBats, 3) : 0,
+                    OBP = (b.AtBats + b.Walks) > 0 ? Math.Round((decimal)(b.Hits + b.Walks) / (b.AtBats + b.Walks), 3) : 0,
+                    SLG = b.AtBats > 0 ? Math.Round((decimal)(b.Hits + b.Doubles + b.Triples * 2 + b.HomeRuns * 3) / b.AtBats, 3) : 0
+                }).ToList();
                 vm.BattingRankings = battingRankings;
             }
             else
             {
                 var pitchers = await _baseballDbService.GetAllPitchersAsync(seasonId);
                 var pitcherBoxes = await _baseballDbService.GetPitcherBoxAsync(seasonId: seasonId);
-
-                var pitchingRankings = pitcherBoxes
+                var grouped = pitcherBoxes
                     .GroupBy(pb => pb.PlayerId)
                     .Select(g => new
                     {
@@ -328,12 +369,34 @@ public class BaseballController : Controller
                         BB = g.Sum(x => x.BB ?? 0),
                         SO = g.Sum(x => x.SO ?? 0),
                         R = g.Sum(x => x.R ?? 0),
-                        ER = g.Sum(x => x.ER ?? 0),
-                        ERA = g.Sum(x => x.IPOuts ?? 0) > 0 ? Math.Round((decimal)g.Sum(x => x.ER ?? 0) * 27 / g.Sum(x => x.IPOuts ?? 0), 2) : 0,
-                        WHIP = g.Sum(x => x.IPOuts ?? 0) > 0 ? Math.Round((decimal)(g.Sum(x => x.H ?? 0) + g.Sum(x => x.BB ?? 0)) * 3 / g.Sum(x => x.IPOuts ?? 0), 2) : 0
+                        ER = g.Sum(x => x.ER ?? 0)
+                    })
+                    .ToList();
+
+                var qualifiedPitchers = grouped
+                    .Where(p => p.IP >= vm.MinQualifiedIP)
+                    .Select(p => new
+                    {
+                        p.PlayerId,
+                        p.PlayerName,
+                        p.Games,
+                        p.IPOuts,
+                        p.IP,
+                        p.H,
+                        p.HR,
+                        p.BB,
+                        p.SO,
+                        p.R,
+                        p.ER,
+                        ERA = p.IPOuts > 0 ? Math.Round((decimal)p.ER * 27 / p.IPOuts, 2) : 0,
+                        WHIP = p.IPOuts > 0 ? Math.Round((decimal)(p.H + p.BB) * 3 / p.IPOuts, 2) : 0
                     })
                     .OrderBy(x => x.ERA)
                     .Take(50)
+                    .ToList();
+                vm.TotalQualifiedPitchers = qualifiedPitchers.Count;
+
+                vm.PitchingRankings = qualifiedPitchers
                     .Select((p, index) => new PitchingRankingItem
                     {
                         Rank = index + 1,
@@ -351,8 +414,6 @@ public class BaseballController : Controller
                         WHIP = p.WHIP
                     })
                     .ToList();
-
-                vm.PitchingRankings = pitchingRankings;
             }
 
             return View(vm);
