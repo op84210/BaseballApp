@@ -14,4 +14,7 @@ public class Team
     /// 球隊名稱
     /// </summary>
     public string TeamName { get; set; } = string.Empty;
+
+    // Navigation properties
+    public ICollection<PlayerTeam> PlayerTeams { get; set; } = new List<PlayerTeam>();
 }

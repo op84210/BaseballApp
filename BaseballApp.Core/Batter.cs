@@ -19,4 +19,7 @@ public class Batter
     /// 球員名稱
     /// </summary>
     public string PlayerName { get; set; } = string.Empty;
+
+    // Navigation properties
+    public ICollection<PlayerTeam> PlayerTeams { get; set; } = new List<PlayerTeam>();
 }

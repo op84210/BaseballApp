@@ -44,4 +44,9 @@ public class PlayerTeam
     /// 是否為現役球員
     /// </summary>
     public bool IsActive { get; set; }
+    
+    // Navigation properties
+    public Batter? Batter { get; set; }
+    public Team? Team { get; set; }
+    public Season? Season { get; set; }
 }

@@ -92,6 +92,27 @@ public class BaseballDbContext : DbContext
             entity.Property(e => e.StartDate).HasColumnName("startDate");
             entity.Property(e => e.EndDate).HasColumnName("endDate");
             entity.Property(e => e.IsActive).HasColumnName("isActive");
+
+            // 關聯關係：PlayerTeam -> Batter
+            entity.HasOne(pt => pt.Batter)
+                .WithMany(b => b.PlayerTeams)
+                .HasForeignKey(pt => pt.PlayerId)
+                .HasPrincipalKey(b => b.PlayerId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // 關聯關係：PlayerTeam -> Team
+            entity.HasOne(pt => pt.Team)
+                .WithMany(t => t.PlayerTeams)
+                .HasForeignKey(pt => pt.TeamId)
+                .HasPrincipalKey(t => t.TeamId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // 關聯關係：PlayerTeam -> Season
+            entity.HasOne(pt => pt.Season)
+                .WithMany()
+                .HasForeignKey(pt => pt.SeasonId)
+                .HasPrincipalKey(s => s.SeasonId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         // tblGame
