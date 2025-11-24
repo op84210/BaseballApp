@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>排行榜快取 API 測試</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #007bff;
+            padding-bottom: 10px;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button.success {
+            background: #28a745;
+        }
+        button.info {
+            background: #17a2b8;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 15px;
+            background: #e9ecef;
+            border-radius: 5px;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        input {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 200px;
+        }
+        .loading {
+            color: #007bff;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏆 排行榜快取 API 測試工具</h1>
+        
+        <div class="section">
+            <h3>更新所有賽季</h3>
+            <button onclick="updateAll()">🔄 更新所有排行榜快取</button>
+            <p style="color: #666; font-size: 12px;">⚠️ 此操作可能需要較長時間</p>
+        </div>
+
+        <div class="section">
+            <h3>更新特定賽季</h3>
+            <input type="text" id="seasonId" placeholder="例如: CPBL-2024-HE" value="CPBL-2024-HE">
+            <br><br>
+            <button class="success" onclick="updateBatting()">⚾ 更新打者排行榜</button>
+            <button class="success" onclick="updatePitching()">🥎 更新投手排行榜</button>
+        </div>
+
+        <div class="section">
+            <h3>檢查快取狀態</h3>
+            <input type="text" id="statusSeasonId" placeholder="例如: CPBL-2024-HE" value="CPBL-2024-HE">
+            <button class="info" onclick="checkStatus()">🔍 檢查狀態</button>
+        </div>
+
+        <div id="result"></div>
+    </div>
+
+    <script>
+        const resultDiv = document.getElementById('result');
+
+        function showResult(data, status = 'success') {
+            const timestamp = new Date().toLocaleString('zh-TW');
+            const color = status === 'success' ? '#28a745' : '#dc3545';
+            resultDiv.innerHTML = `
+                <div style="color: ${color}; margin-bottom: 10px;">
+                    <strong>[${timestamp}] ${status === 'success' ? '✓ 成功' : '✗ 失敗'}</strong>
+                </div>
+                ${JSON.stringify(data, null, 2)}
+            `;
+        }
+
+        function showLoading() {
+            resultDiv.innerHTML = '<div class="loading">⏳ 處理中，請稍候...</div>';
+        }
+
+        async function updateAll() {
+            showLoading();
+            try {
+                const response = await fetch('/api/rankingcache/all', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                showResult(data, response.ok ? 'success' : 'error');
+            } catch (error) {
+                showResult({ error: error.message }, 'error');
+            }
+        }
+
+        async function updateBatting() {
+            const seasonId = document.getElementById('seasonId').value;
+            if (!seasonId) {
+                alert('請輸入賽季 ID');
+                return;
+            }
+            showLoading();
+            try {
+                const response = await fetch(`/api/rankingcache/batting/${seasonId}`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                showResult(data, response.ok ? 'success' : 'error');
+            } catch (error) {
+                showResult({ error: error.message }, 'error');
+            }
+        }
+
+        async function updatePitching() {
+            const seasonId = document.getElementById('seasonId').value;
+            if (!seasonId) {
+                alert('請輸入賽季 ID');
+                return;
+            }
+            showLoading();
+            try {
+                const response = await fetch(`/api/rankingcache/pitching/${seasonId}`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                showResult(data, response.ok ? 'success' : 'error');
+            } catch (error) {
+                showResult({ error: error.message }, 'error');
+            }
+        }
+
+        async function checkStatus() {
+            const seasonId = document.getElementById('statusSeasonId').value;
+            if (!seasonId) {
+                alert('請輸入賽季 ID');
+                return;
+            }
+            showLoading();
+            try {
+                const response = await fetch(`/api/rankingcache/status/${seasonId}`);
+                const data = await response.json();
+                showResult(data, response.ok ? 'success' : 'error');
+            } catch (error) {
+                showResult({ error: error.message }, 'error');
+            }
+        }
+    </script>
+</body>
+</html>

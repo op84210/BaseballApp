@@ -28,6 +28,10 @@ public class BaseballDbContext : DbContext
     public DbSet<Event> Events { get; set; }
     public DbSet<Runner> Runners { get; set; }
 
+    // 排行榜快取資料表
+    public DbSet<BattingRankingCache> BattingRankingCaches { get; set; }
+    public DbSet<PitchingRankingCache> PitchingRankingCaches { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -276,6 +280,71 @@ public class BaseballDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").ValueGeneratedOnAdd();
             entity.Property(e => e.RunnerId).HasColumnName("runnerId");
+        });
+
+        // tblBattingRankingCache
+        modelBuilder.Entity<BattingRankingCache>(entity =>
+        {
+            entity.ToTable("tblBattingRankingCache");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id").ValueGeneratedOnAdd();
+            entity.Property(e => e.SeasonId).HasColumnName("seasonId");
+            entity.Property(e => e.PlayerId).HasColumnName("playerId");
+            entity.Property(e => e.PlayerName).HasColumnName("playerName");
+            entity.Property(e => e.Rank).HasColumnName("rank");
+            entity.Property(e => e.Games).HasColumnName("games");
+            entity.Property(e => e.PA).HasColumnName("pa");
+            entity.Property(e => e.AB).HasColumnName("ab");
+            entity.Property(e => e.H).HasColumnName("h");
+            entity.Property(e => e.TwoB).HasColumnName("twoB");
+            entity.Property(e => e.ThreeB).HasColumnName("threeB");
+            entity.Property(e => e.HR).HasColumnName("hr");
+            entity.Property(e => e.RBI).HasColumnName("rbi");
+            entity.Property(e => e.R).HasColumnName("r");
+            entity.Property(e => e.SO).HasColumnName("so");
+            entity.Property(e => e.BB).HasColumnName("bb");
+            entity.Property(e => e.SB).HasColumnName("sb");
+            entity.Property(e => e.AVG).HasColumnName("avg").HasColumnType("decimal(5,3)");
+            entity.Property(e => e.OBP).HasColumnName("obp").HasColumnType("decimal(5,3)");
+            entity.Property(e => e.SLG).HasColumnName("slg").HasColumnType("decimal(5,3)");
+            entity.Property(e => e.OPS).HasColumnName("ops").HasColumnType("decimal(5,3)");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updatedAt");
+
+            // 建立複合索引：seasonId + playerId
+            entity.HasIndex(e => new { e.SeasonId, e.PlayerId }).IsUnique();
+            // 建立索引：seasonId + rank
+            entity.HasIndex(e => new { e.SeasonId, e.Rank });
+        });
+
+        // tblPitchingRankingCache
+        modelBuilder.Entity<PitchingRankingCache>(entity =>
+        {
+            entity.ToTable("tblPitchingRankingCache");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id").ValueGeneratedOnAdd();
+            entity.Property(e => e.SeasonId).HasColumnName("seasonId");
+            entity.Property(e => e.PlayerId).HasColumnName("playerId");
+            entity.Property(e => e.PlayerName).HasColumnName("playerName");
+            entity.Property(e => e.Rank).HasColumnName("rank");
+            entity.Property(e => e.Games).HasColumnName("games");
+            entity.Property(e => e.IP).HasColumnName("ip").HasColumnType("decimal(5,1)");
+            entity.Property(e => e.IPOuts).HasColumnName("ipOuts");
+            entity.Property(e => e.H).HasColumnName("h");
+            entity.Property(e => e.HR).HasColumnName("hr");
+            entity.Property(e => e.BB).HasColumnName("bb");
+            entity.Property(e => e.SO).HasColumnName("so");
+            entity.Property(e => e.R).HasColumnName("r");
+            entity.Property(e => e.ER).HasColumnName("er");
+            entity.Property(e => e.W).HasColumnName("w");
+            entity.Property(e => e.L).HasColumnName("l");
+            entity.Property(e => e.ERA).HasColumnName("era").HasColumnType("decimal(5,2)");
+            entity.Property(e => e.WHIP).HasColumnName("whip").HasColumnType("decimal(5,2)");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updatedAt");
+
+            // 建立複合索引：seasonId + playerId
+            entity.HasIndex(e => new { e.SeasonId, e.PlayerId }).IsUnique();
+            // 建立索引：seasonId + rank
+            entity.HasIndex(e => new { e.SeasonId, e.Rank });
         });
     }
 }
