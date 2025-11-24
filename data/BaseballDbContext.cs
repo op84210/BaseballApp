@@ -251,6 +251,24 @@ public class BaseballDbContext : DbContext
                 .HasForeignKey(pa => new { pa.SeasonId, pa.GameSeq })
                 .HasPrincipalKey(g => new { g.SeasonId, g.Seq })
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // 關聯關係：PA -> Batter
+            entity.HasOne<Batter>()
+                .WithMany()
+                .HasForeignKey(pa => pa.BatterId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // 關聯關係：PA -> Pitcher
+            entity.HasOne<Pitcher>()
+                .WithMany()
+                .HasForeignKey(pa => pa.PitcherId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // 關聯關係：PA -> Catcher
+            entity.HasOne<Batter>()
+                .WithMany()
+                .HasForeignKey(pa => pa.CatcherId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         // tblEvent

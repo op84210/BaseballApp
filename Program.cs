@@ -63,6 +63,8 @@ app.MapStaticAssets();
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Baseball}/{action=Rankings}/{id?}")
+    //pattern: "{controller=Baseball}/{action=PlayerDetail}/{id?}")
+    //pattern: "{controller=Baseball}/{action=PlayerDetail}/{playerId=3zbEo}&{seasonId=CPBL-2024-HE}")
     .WithStaticAssets();
 
 app.MapControllers(); // 映射 /api/*

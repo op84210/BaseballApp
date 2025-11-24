@@ -11,11 +11,13 @@ public interface IBaseballDbService
     Task<IEnumerable<Game>> GetGamesAsync(string? seasonId = null, string? teamId = null);
     Task<IEnumerable<BatterBox>> GetBatterBoxAsync(string? playerId = null, string? seasonId = null);
     Task<IEnumerable<PitcherBox>> GetPitcherBoxAsync(string? playerId = null, string? seasonId = null);
-    Task<IEnumerable<PA>> GetPAAsync(string? batterId = null, int? gameSeq = null);
+    Task<IEnumerable<PA>> GetPAAsync(string? batterId = null, int? gameSeq = null, string? seasonId = null);
     Task<IEnumerable<Event>> GetEventsAsync(int paId);
     Task<BattingStats> CalculateBattingStatsAsync(string playerId, string? seasonId = null);
     Task<IEnumerable<Batter>> GetAllBattersAsync(string? seasonId = null);
+    Task<Batter?> GetBatterAsync(string playerId);
     Task<IEnumerable<Pitcher>> GetAllPitchersAsync(string? seasonId = null);
+    Task<Pitcher?> GetPitcherAsync(string playerId);
     Task<IEnumerable<Team>> GetAllTeamsAsync();
     Task<IEnumerable<Stadium>> GetAllStadiumsAsync();
     Task<Dictionary<string, string>> GetBatterNameMapAsync();
@@ -154,7 +156,7 @@ public class BaseballDbService : IBaseballDbService
         }
     }
 
-    public async Task<IEnumerable<PA>> GetPAAsync(string? batterId = null, int? gameSeq = null)
+    public async Task<IEnumerable<PA>> GetPAAsync(string? batterId = null, int? gameSeq = null, string? seasonId = null)
     {
         try
         {
@@ -168,6 +170,11 @@ public class BaseballDbService : IBaseballDbService
             if (gameSeq.HasValue)
             {
                 query = query.Where(pa => pa.GameSeq == gameSeq.Value);
+            }
+
+            if (!string.IsNullOrEmpty(seasonId) && seasonId != "ALL")
+            {
+                query = query.Where(pa => pa.SeasonId == seasonId);
             }
 
             return await query
@@ -247,6 +254,30 @@ public class BaseballDbService : IBaseballDbService
     }
 
     /// <summary>
+    /// 取得指定打者資料
+    /// </summary>
+    /// <param name="playerId">
+    /// 球員識別碼
+    /// </param>
+    /// <returns>
+    /// 指定打者的資料集合
+    /// </returns>
+    public async Task<Batter?> GetBatterAsync(string playerId)
+    {
+        try
+        {
+            return await _context.Batters
+                .Where(b => b.PlayerId == playerId)
+                .FirstOrDefaultAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "讀取打者資料時發生錯誤，playerId={PlayerId}", playerId);
+            return null;
+        }
+    }
+
+    /// <summary>
     /// 取得所有投手資料，並可依賽季篩選
     /// </summary>
     /// <param name="seasonId">
@@ -279,6 +310,20 @@ public class BaseballDbService : IBaseballDbService
         {
             _logger.LogError(ex, "讀取投手資料時發生錯誤");
             return Enumerable.Empty<Pitcher>();
+        }
+    }
+
+    public async Task<Pitcher> GetPitcherAsync(string playerId)
+    {
+        try
+        {
+            return await _context.Pitchers
+                .FirstOrDefaultAsync(p => p.PlayerId == playerId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "讀取投手資料時發生錯誤，playerId={PlayerId}", playerId);
+            return null;
         }
     }
 

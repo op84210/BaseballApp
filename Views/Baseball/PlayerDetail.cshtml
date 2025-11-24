@@ -132,7 +132,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (dynamic pa in ViewBag.Stats.BestPAs)
+                        @foreach (dynamic pa in Model.Stats.BestPAs)
                         {
                             <tr>
                                 <td>@pa.Date</td>
@@ -153,69 +153,120 @@
 @using System.Text.Json
 <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
 <script>
-        // 從後端提供的系列賽統計資料：結構示例
-        // SeriesStats: [ { SeriesId, SeriesName, Games:[{Date, Seq, PA, H, HR, RBI, SO, BB, OPS}], Summary:{ AVG, OBP, SLG, OPS, HR, RBI, SO, BB } } ]
-        const seriesStats = @Html.Raw(ViewBag.SeriesStats != null ? JsonSerializer.Serialize(ViewBag.SeriesStats) : "[]");
+        // 從 Model.Stats.GameStats 取得比賽數據
+        const gameStats = @Html.Raw(JsonSerializer.Serialize(Model.Stats.GameStats));
 
         const lineChart = echarts.init(document.getElementById('lineChart'));
         const radarChart = echarts.init(document.getElementById('radarChart'));
 
-        function renderCharts(series) {
-                if (!series) { lineChart.clear(); radarChart.clear(); return; }
-                const games = series.Games || [];
+        function calculateStats(games) {
+                if (!games || games.length === 0) return null;
+                
+                const totalAB = games.reduce((sum, g) => sum + g.AB, 0);
+                const totalH = games.reduce((sum, g) => sum + g.H, 0);
+                const total1B = games.reduce((sum, g) => sum + g._1B, 0);
+                const total2B = games.reduce((sum, g) => sum + g._2B, 0);
+                const total3B = games.reduce((sum, g) => sum + g._3B, 0);
+                const totalHR = games.reduce((sum, g) => sum + g.HR, 0);
+                const totalBB = games.reduce((sum, g) => sum + g.BB, 0);
+                const totalHBP = games.reduce((sum, g) => sum + g.HBP, 0);
+                const totalSF = games.reduce((sum, g) => sum + g.SF, 0);
+                const totalSO = games.reduce((sum, g) => sum + g.SO, 0);
+                const totalRBI = games.reduce((sum, g) => sum + g.RBI, 0);
 
-                // 折線圖：顯示 OPS 趨勢
+                const AVG = totalAB > 0 ? totalH / totalAB : 0;
+                const OBP = (totalAB + totalBB + totalHBP + totalSF) > 0 
+                        ? (totalH + totalBB + totalHBP) / (totalAB + totalBB + totalHBP + totalSF) 
+                        : 0;
+                const totalBases = total1B + (total2B * 2) + (total3B * 3) + (totalHR * 4);
+                const SLG = totalAB > 0 ? totalBases / totalAB : 0;
+                const OPS = OBP + SLG;
+
+                return { AVG, OBP, SLG, OPS, HR: totalHR, RBI: totalRBI, SO: totalSO, BB: totalBB };
+        }
+
+        function renderCharts(seasonId) {
+                if (!seasonId) { 
+                        lineChart.clear(); 
+                        radarChart.clear(); 
+                        return; 
+                }
+                
+                // 篩選該賽季的比賽數據
+                const filteredGames = gameStats; // 如果需要按 seasonId 篩選，可以在這裡加入邏輯
+                
+                // 計算每場的 OPS（簡化版：用打擊率作為趨勢）
+                const opsData = filteredGames.map(g => {
+                        const avg = g.AB > 0 ? g.H / g.AB : 0;
+                        const obp = (g.AB + g.BB + g.HBP + g.SF) > 0 
+                                ? (g.H + g.BB + g.HBP) / (g.AB + g.BB + g.HBP + g.SF) 
+                                : 0;
+                        const bases = g._1B + (g._2B * 2) + (g._3B * 3) + (g.HR * 4);
+                        const slg = g.AB > 0 ? bases / g.AB : 0;
+                        return obp + slg;
+                });
+
+                // 折線圖：顯示逐場 OPS 趨勢
                 lineChart.setOption({
-                        title: { text: series.SeriesName + ' OPS 趨勢', left: 'center', textStyle: { fontSize: 14 } },
+                        title: { text: 'OPS 趨勢', left: 'center', textStyle: { fontSize: 14 } },
                         tooltip: { trigger: 'axis' },
                         grid: { left: 50, right: 20, top: 50, bottom: 40 },
-                        xAxis: { type: 'category', data: games.map(g => g.Date) },
+                        xAxis: { 
+                                type: 'category', 
+                                data: filteredGames.map(g => new Date(g.Date).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' }))
+                        },
                         yAxis: { type: 'value', name: 'OPS' },
                         series: [{
                                 name: 'OPS', type: 'line', smooth: true,
-                                data: games.map(g => g.OPS),
+                                data: opsData,
                                 areaStyle: { opacity: 0.15 }
                         }]
                 });
 
-                // 雷達圖：能力概況
-                const s = series.Summary || {};
+                // 雷達圖：整體能力概況
+                const stats = calculateStats(filteredGames);
                 const indicators = [
                         { name: 'AVG', max: 1 },
                         { name: 'OBP', max: 1 },
                         { name: 'SLG', max: 2 },
-                        { name: 'HR', max: Math.max((s.HR || 0) * 1.3, 1) },
-                        { name: 'RBI', max: Math.max((s.RBI || 0) * 1.3, 1) },
-                        { name: 'SO(少為佳)', max: Math.max((s.SO || 0) * 1.3, 5) }
+                        { name: 'HR', max: Math.max((stats.HR || 0) * 1.3, 1) },
+                        { name: 'RBI', max: Math.max((stats.RBI || 0) * 1.3, 1) },
+                        { name: 'SO(少為佳)', max: Math.max((stats.SO || 0) * 1.3, 5) }
                 ];
                 radarChart.setOption({
-                        title: { text: series.SeriesName + ' 能力雷達', left: 'center', textStyle: { fontSize: 14 } },
+                        title: { text: '能力雷達', left: 'center', textStyle: { fontSize: 14 } },
                         tooltip: {},
                         radar: { indicator: indicators },
                         series: [{
                                 type: 'radar',
                                 data: [{
                                         value: [
-                                                s.AVG || 0,
-                                                s.OBP || 0,
-                                                s.SLG || 0,
-                                                s.HR || 0,
-                                                s.RBI || 0,
-                                                (s.SO ? (indicators[5].max - s.SO) : 0) // 反轉三振值 越大代表三振越少
+                                                stats.AVG || 0,
+                                                stats.OBP || 0,
+                                                stats.SLG || 0,
+                                                stats.HR || 0,
+                                                stats.RBI || 0,
+                                                (stats.SO ? (indicators[5].max - stats.SO) : 0)
                                         ],
-                                        name: series.SeriesName
+                                        name: '球員數據'
                                 }],
                                 areaStyle: { opacity: 0.3 }
                         }]
                 });
         }
 
-        function renderMetrics(series) {
+        function renderMetrics(seasonId) {
                 const container = document.getElementById('seriesMetrics');
-                if (!series) { container.innerHTML = '<p class="text-muted">請選擇系列賽以查看指標。</p>'; return; }
-                const s = series.Summary || {};
+                if (!seasonId) { 
+                        container.innerHTML = '<p class="text-muted">請選擇系列賽以查看指標。</p>'; 
+                        return; 
+                }
+                
+                const stats = calculateStats(gameStats);
+                const fmt = v => (v || v === 0) ? Number(v).toFixed(3) : '-';
+                
                 container.innerHTML = `
-                        <h5 class="mb-3">${series.SeriesName} 指標總覽</h5>
+                        <h5 class="mb-3">指標總覽</h5>
                         <div class="table-responsive">
                             <table class="table table-sm table-bordered">
                                 <thead class="table-light">
@@ -225,27 +276,24 @@
                                 </thead>
                                 <tbody>
                                     <tr>
-                                        <td>${fmt(s.AVG)}</td>
-                                        <td>${fmt(s.OBP)}</td>
-                                        <td>${fmt(s.SLG)}</td>
-                                        <td>${fmt(s.OPS)}</td>
-                                        <td>${s.HR ?? 0}</td>
-                                        <td>${s.RBI ?? 0}</td>
-                                        <td>${s.SO ?? 0}</td>
-                                        <td>${s.BB ?? 0}</td>
+                                        <td>${fmt(stats.AVG)}</td>
+                                        <td>${fmt(stats.OBP)}</td>
+                                        <td>${fmt(stats.SLG)}</td>
+                                        <td>${fmt(stats.OPS)}</td>
+                                        <td>${stats.HR ?? 0}</td>
+                                        <td>${stats.RBI ?? 0}</td>
+                                        <td>${stats.SO ?? 0}</td>
+                                        <td>${stats.BB ?? 0}</td>
                                     </tr>
                                 </tbody>
                             </table>
                         </div>`;
         }
 
-        function fmt(v) { return (v || v === 0) ? Number(v).toFixed(3) : '-'; }
-
         document.getElementById('seriesSelect').addEventListener('change', e => {
-                const id = e.target.value;
-                const series = seriesStats.find(s => String(s.SeriesId) === id);
-                renderCharts(series);
-                renderMetrics(series);
+                const seasonId = e.target.value;
+                renderCharts(seasonId);
+                renderMetrics(seasonId);
         });
 
         window.addEventListener('resize', () => { lineChart.resize(); radarChart.resize(); });

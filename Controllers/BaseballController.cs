@@ -1,6 +1,7 @@
 using BaseballApp.Models;
 using BaseballApp.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Rendering;
 
 namespace BaseballApp.Controllers;
 
@@ -199,67 +200,90 @@ public class BaseballController : Controller
                 seasonId = null; // 使用 null 表示生涯
             }
 
-            var batters = await _baseballDbService.GetAllBattersAsync(seasonId);
-            var player = batters.FirstOrDefault(b => b.PlayerId == playerId);
-
+            // 取得球員資料
+            var player = await _baseballDbService.GetBatterAsync(playerId);
             if (player == null)
             {
                 return NotFound();
             }
 
+            // 取得系列賽列表
+            var seriesList = GetAllSeasonsAsync().Result;
+
             // 取得球員打席記錄（ALL 代表使用全部賽季資料）
-            var paList = await _baseballDbService.GetPAAsync(batterId: playerId);
-            var seasonPAs = seasonId == null
-                ? paList.ToList()
-                : paList.Where(pa => pa.SeasonId == seasonId).ToList();
+            var paList = await _baseballDbService.GetPAAsync(batterId: playerId, seasonId: seasonId);
+            
+            // 打擊數據 (按比賽統計)
+            var gameStats = paList
+                .GroupBy(pa => new { pa.SeasonId, pa.GameSeq })
+                .Select(g => {
+                    return new GameStat
+                    {
+                        Date = g.FirstOrDefault()?.Game?.Date ?? DateTime.MinValue,
+                        Seq = g.Key.GameSeq,
+                        PA = g.Count(),
+                        _1B = g.Count(pa => pa.Result == "1B"),
+                        _2B = g.Count(pa => pa.Result == "2B"),
+                        _3B = g.Count(pa => pa.Result == "3B"),
+                        HR = g.Count(pa => pa.Result == "HR"),
+                        IHR = g.Count(pa => pa.Result == "IHR"),
+                        SO = g.Count(pa => pa.Result == "SO"),
+                        uBB = g.Count(pa => pa.Result == "uBB"),
+                        IBB = g.Count(pa => pa.Result == "IBB"),
+                        HBP = g.Count(pa => pa.Result == "HBP"),
+                        GO = g.Count(pa => pa.Result == "GO"),
+                        FO = g.Count(pa => pa.Result == "FO"),
+                        FC = g.Count(pa => pa.Result == "FC"),
+                        E = g.Count(pa => pa.Result == "E"),
+                        SH = g.Count(pa => pa.Result == "SH"),
+                        SF = g.Count(pa => pa.Result == "SF"),
+                        GIDP = g.Count(pa => pa.Result == "GIDP"),
+                        DP = g.Count(pa => pa.Result == "DP"),
+                        TP = g.Count(pa => pa.Result == "TP"),
+                        IH = g.Count(pa => pa.Result == "IH"),
+                        IR = g.Count(pa => pa.Result == "IR"),
+                        ID = g.Count(pa => pa.Result == "ID"),
+                        IGNORE = g.Count(pa => pa.Result == "IGNORE"),
+                        RBI = g.Sum(pa => pa.RBI ?? 0),
+                        Opponent = (g.FirstOrDefault()?.Game?.HomeTeam == player.PlayerTeams ?
+                            g.FirstOrDefault()?.Game?.AwayTeam?.TeamName : 
+                            g.FirstOrDefault()?.Game?.HomeTeam?.TeamName) ?? 
+                            "Unknown",
+                        IsHome = g.FirstOrDefault()?.Game?.HomeTeam == player.PlayerTeams
+                    };
+                })
+                .OrderBy(x => x.Date)
+                .ToList();
 
-            // 計算統計數據
-            var stats = new
+            // 最佳打席
+            var bestPAs = paList
+                .Where(pa => pa.WPA.HasValue)
+                .OrderByDescending(pa => pa.WPA)
+                .Take(5)
+                .Select(pa => new BestPA
+                {
+                    Date = pa?.Game?.Date ?? DateTime.MinValue,
+                    Seq = pa?.GameSeq ?? 0,
+                    Inning = pa?.Inning ?? 0,
+                    PASeq = pa?.PaSeq ?? 0,
+                    PAResult = pa?.Result ?? string.Empty,
+                    WPA = pa?.WPA
+                })
+                .ToList();
+
+            // 建立 ViewModel
+            var model = new PlayerDetailViewModel
             {
-                TotalPAs = seasonPAs.Count,
-                HomeRuns = seasonPAs.Count(pa => pa.Result == "HR"),
-                Strikeouts = seasonPAs.Count(pa => pa.Result == "SO"),
-                Walks = seasonPAs.Count(pa => pa.Result == "uBB" || pa.Result == "IBB"),
-                TotalRBI = seasonPAs.Sum(pa => pa.RBI ?? 0),
-                AvgWPA = seasonPAs.Where(pa => pa.WPA.HasValue).Any() ?
-                    seasonPAs.Where(pa => pa.WPA.HasValue).Average(pa => pa.WPA) : 0,
-
-                // 按比賽統計
-                GameStats = seasonPAs
-                    .GroupBy(pa => new { pa.SeasonId, pa.GameSeq })
-                    .Select(g => new
-                    {
-                        GameSeq = g.Key.GameSeq,
-                        PAs = g.Count(),
-                        Hits = g.Count(pa => pa.Result == "1B" || pa.Result == "2B" ||
-                                            pa.Result == "3B" || pa.Result == "HR"),
-                        HRs = g.Count(pa => pa.Result == "HR"),
-                        RBIs = g.Sum(pa => pa.RBI ?? 0)
-                    })
-                    .OrderBy(x => x.GameSeq)
-                    .ToList(),
-
-                // 最佳打席
-                BestPAs = seasonPAs
-                    .Where(pa => pa.WPA.HasValue)
-                    .OrderByDescending(pa => pa.WPA)
-                    .Take(5)
-                    .Select(pa => new
-                    {
-                        GameSeq = pa.GameSeq,
-                        Inning = pa.Inning,
-                        Result = pa.Result,
-                        RBI = pa.RBI,
-                        WPA = pa.WPA
-                    })
-                    .ToList()
+                SeasonId = seasonId ?? "ALL",
+                Player = player,
+                Stats = new Stats
+                {
+                    GameStats = gameStats,
+                    BestPAs = bestPAs
+                }
             };
 
-            ViewBag.Player = player;
-            ViewBag.SeasonId = seasonId;
-            ViewBag.Stats = stats;
-
-            return View();
+            return View(model);
         }
         catch (Exception ex)
         {
@@ -289,17 +313,52 @@ public class BaseballController : Controller
         };
 
         // 讀取賽季資料並插入 "ALL" 選項於最前
-        var seasons = await _baseballDbService.GetAllSeasonsAsync();
-        vm.Seasons = seasons
-            .OrderByDescending(s => s.SeasonId)
-            .ToList();
-        vm.Seasons.Insert(0, new Season { SeasonId = "ALL", SeasonName = "全部賽季" });
+        vm.Seasons = GetAllSeasonsAsync().Result;
 
         // 計算門檻：單季 -> 打席 >= 120 * 3.1；投手局數 >= 120。全部賽季不設門檻。
         vm.MinQualifiedPA = seasonId != "CPBL-2024-xa" ? 0 : (int)Math.Ceiling(120 * 3.1m);
         vm.MinQualifiedIP = seasonId != "CPBL-2024-xa" ? 0 : 120; // 以整數局為門檻
 
         return vm;
+    }
+
+    /// <summary>
+    /// 取得所有賽季列表，並在最前面加入 "全部賽季" 選項
+    /// </summary>
+    /// <returns>
+    /// 賽季列表
+    /// </returns>
+    private async Task<List<SelectListItem>> GetAllSeasonsAsync()
+    {
+        try
+        {
+            List<SelectListItem> list = [];
+
+            var seasons = await _baseballDbService.GetAllSeasonsAsync();
+
+            // 建立 SelectListItem 列表
+            list = [.. seasons
+                .OrderByDescending(s => s.SeasonId)
+                .Select(s => new SelectListItem
+                {
+                    Value = s.SeasonId,
+                    Text = s.SeasonName ?? s.SeasonId
+                })];
+
+            // 插入 "全部賽季" 選項於最前面
+            list.Insert(0, new SelectListItem
+            {
+                Value = "ALL",
+                Text = "全部賽季"
+            });
+
+            return list;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "載入賽季列表時發生錯誤");
+            return [];
+        }
     }
 
     /// <summary>
