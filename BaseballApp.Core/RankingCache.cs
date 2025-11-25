@@ -86,6 +86,16 @@ public class BattingRankingCache
     public int BB { get; set; }
 
     /// <summary>
+    /// 觸身球數
+    /// </summary>
+    public int HBP { get; set; }
+
+    /// <summary>
+    /// 犧牲飛球數
+    /// </summary>
+    public int SF { get; set; }
+
+    /// <summary>
     /// 盜壘數
     /// </summary>
     public int SB { get; set; }

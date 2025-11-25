@@ -22,12 +22,17 @@ public interface IRankingCacheService
     Task UpdateAllRankingsAsync();
 
     /// <summary>
-    /// 取得打者排行榜（從快取）
+    /// 取得打者排行榜(從快取)
     /// </summary>
     Task<List<BattingRankingItem>> GetBattingRankingsFromCacheAsync(string seasonId, int minQualifiedPA = 0);
 
     /// <summary>
-    /// 取得投手排行榜（從快取）
+    /// 取得所有打者的統計數據(從快取,用於計算PR值)
+    /// </summary>
+    Task<List<BattingRankingCache>> GetBattingStatsFromCacheAsync(string seasonId);
+
+    /// <summary>
+    /// 取得投手排行榜(從快取)
     /// </summary>
     Task<List<PitchingRankingItem>> GetPitchingRankingsFromCacheAsync(string seasonId, decimal minQualifiedIP = 0);
 
@@ -61,41 +66,58 @@ public class RankingCacheService : IRankingCacheService
 
             // 計算打者統計
             var batterEntities = await _baseballDbService.GetAllBattersAsync(seasonId);
+            
+            // 一次性取得所有PA記錄,避免重複查詢
+            var allPAs = await _baseballDbService.GetPAAsync(seasonId: seasonId);
+            
             var allStats = new List<BattingStats>();
+            var batterHBPMap = new Dictionary<string, int>();
+            var batterSFMap = new Dictionary<string, int>();
 
             foreach (var batter in batterEntities)
             {
                 var stats = await _baseballDbService.CalculateBattingStatsAsync(batter.PlayerId, seasonId);
                 allStats.Add(stats);
+
+                // 從已載入的PA記錄中篩選並計算HBP和SF
+                var batterPAs = allPAs.Where(pa => pa.BatterId == batter.PlayerId).ToList();
+                batterHBPMap[batter.PlayerId] = batterPAs.Count(pa => pa.Result == "HBP");
+                batterSFMap[batter.PlayerId] = batterPAs.Count(pa => pa.Result == "SF");
             }
 
             // 依安打數排序並賦予排名
             var rankedStats = allStats
                 .OrderByDescending(s => s.Hits)
                 .ThenByDescending(s => s.BattingAverage)
-                .Select((stats, index) => new BattingRankingCache
+                .Select((stats, index) =>
                 {
-                    SeasonId = seasonId,
-                    PlayerId = batterEntities.FirstOrDefault(b => b.PlayerName == stats.PlayerName)?.PlayerId ?? "",
-                    PlayerName = stats.PlayerName,
-                    Rank = index + 1,
-                    Games = stats.Games,
-                    PA = stats.PlateAppearances,
-                    AB = stats.AtBats,
-                    H = stats.Hits,
-                    TwoB = stats.Doubles,
-                    ThreeB = stats.Triples,
-                    HR = stats.HomeRuns,
-                    RBI = stats.RBIs,
-                    R = stats.Runs,
-                    SO = stats.Strikeouts,
-                    BB = stats.Walks,
-                    SB = stats.StolenBases,
-                    AVG = (decimal)stats.BattingAverage,
-                    OBP = (decimal)stats.OnBasePercentage,
-                    SLG = (decimal)stats.SluggingPercentage,
-                    OPS = (decimal)stats.OPS,
-                    UpdatedAt = DateTime.Now
+                    var playerId = batterEntities.FirstOrDefault(b => b.PlayerName == stats.PlayerName)?.PlayerId ?? "";
+                    return new BattingRankingCache
+                    {
+                        SeasonId = seasonId,
+                        PlayerId = playerId,
+                        PlayerName = stats.PlayerName,
+                        Rank = index + 1,
+                        Games = stats.Games,
+                        PA = stats.PlateAppearances,
+                        AB = stats.AtBats,
+                        H = stats.Hits,
+                        TwoB = stats.Doubles,
+                        ThreeB = stats.Triples,
+                        HR = stats.HomeRuns,
+                        RBI = stats.RBIs,
+                        R = stats.Runs,
+                        SO = stats.Strikeouts,
+                        BB = stats.Walks,
+                        HBP = batterHBPMap.GetValueOrDefault(playerId, 0),
+                        SF = batterSFMap.GetValueOrDefault(playerId, 0),
+                        SB = stats.StolenBases,
+                        AVG = (decimal)stats.BattingAverage,
+                        OBP = (decimal)stats.OnBasePercentage,
+                        SLG = (decimal)stats.SluggingPercentage,
+                        OPS = (decimal)stats.OPS,
+                        UpdatedAt = DateTime.Now
+                    };
                 })
                 .ToList();
 
@@ -257,6 +279,21 @@ public class RankingCacheService : IRankingCacheService
         {
             _logger.LogError(ex, $"從快取讀取打者排行榜時發生錯誤：{seasonId}");
             return new List<BattingRankingItem>();
+        }
+    }
+
+    public async Task<List<BattingRankingCache>> GetBattingStatsFromCacheAsync(string seasonId)
+    {
+        try
+        {
+            return await _context.BattingRankingCaches
+                .Where(c => c.SeasonId == seasonId)
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"從快取讀取打者統計數據時發生錯誤：{seasonId}");
+            return new List<BattingRankingCache>();
         }
     }
 

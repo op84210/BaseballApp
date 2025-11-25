@@ -194,6 +194,7 @@
                         {
                             <tr>
                                 <td>@game.Date.ToString("yyyy/MM/dd")</td>
+                                <td>@game.SeasonName</td>
                                 <td>G@(game.Seq)</td>
                                 <td>@game.PA</td>
                                 <td>@game.H</td>
@@ -233,6 +234,7 @@
                         {
                             <tr>
                                 <td>@pa.Date.ToString("yyyy/MM/dd")</td>
+                                <td>@pa.SeasonName</td>
                                 <td>G@(pa.Seq)</td>
                                 <td>@pa.Inning</td>
                                 <td>@pa.PASeq</td>
@@ -255,12 +257,14 @@
     <script>
         // 從後端取得比賽數據
         const gameStats = @Html.Raw(JsonSerializer.Serialize(Model.Stats.GameStats));
+        const percentileRanks = @Html.Raw(JsonSerializer.Serialize(Model.Stats.PercentileRanks));
+        const seasonAverages = @Html.Raw(JsonSerializer.Serialize(Model.Stats.SeasonAverages));
         const playerId = '@Model.Player.PlayerId';
         const seasonId = '@Model.SeasonId';
         const actionUrl = '@Url.Action("PlayerDetail", "Baseball")';
 
         // 初始化模組
-        PlayerDetailModule.init(gameStats, seasonId);
+        PlayerDetailModule.init(gameStats, seasonId, percentileRanks, seasonAverages);
         PlayerDetailModule.setupSeasonSelector(playerId, actionUrl);
     </script>
 }

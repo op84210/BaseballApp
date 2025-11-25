@@ -191,9 +191,19 @@ public class Stats
     public List<GameStat> GameStats { get; set; } = [];
 
     /// <summary>
-    /// 最佳打席列表（依 WPA 排序）
+    /// 最佳打席列表(依 WPA 排序)
     /// </summary>
     public List<BestPA> BestPAs { get; set; } = [];
+
+    /// <summary>
+    /// 各項指標百分位排名 (PR值: 0-100)
+    /// </summary>
+    public Dictionary<string, decimal> PercentileRanks { get; set; } = [];
+
+    /// <summary>
+    /// 賽季各項指標平均值
+    /// </summary>
+    public Dictionary<string, decimal> SeasonAverages { get; set; } = [];
 }
 
 /// <summary>

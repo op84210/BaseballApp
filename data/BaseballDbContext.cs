@@ -59,8 +59,8 @@ public class BaseballDbContext : DbContext
         {
             entity.ToTable("tblStadium");
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasColumnName("stadiumId");
-            entity.Property(e => e.stadium).HasColumnName("stadiumName");
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.stadium).HasColumnName("stadium");
         });
 
         // tblBatter
@@ -130,6 +130,34 @@ public class BaseballDbContext : DbContext
             entity.Property(e => e.StadiumId).HasColumnName("stadiumId");
             entity.Property(e => e.AwayTeamId).HasColumnName("awayTeamId");
             entity.Property(e => e.HomeTeamId).HasColumnName("homeTeamId");
+
+            // 關聯關係：Game -> Season
+            entity.HasOne(g => g.Season)
+                .WithMany()
+                .HasForeignKey(g => g.SeasonId)
+                .HasPrincipalKey(s => s.SeasonId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // 關聯關係：Game -> Stadium
+            entity.HasOne(g => g.Stadium)
+                .WithMany()
+                .HasForeignKey(g => g.StadiumId)
+                .HasPrincipalKey(s => s.Id)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // 關聯關係：Game -> Away Team
+            entity.HasOne(g => g.AwayTeam)
+                .WithMany()
+                .HasForeignKey(g => g.AwayTeamId)
+                .HasPrincipalKey(t => t.TeamId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // 關聯關係：Game -> Home Team
+            entity.HasOne(g => g.HomeTeam)
+                .WithMany()
+                .HasForeignKey(g => g.HomeTeamId)
+                .HasPrincipalKey(t => t.TeamId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         // tblScores

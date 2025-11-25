@@ -200,6 +200,9 @@ public class BaseballController : Controller
                 seasonId = null; // 使用 null 表示生涯
             }
 
+            // 取得賽季資料
+            var seasons = await _baseballDbService.GetAllSeasonsAsync();
+
             // 取得球員資料
             var player = await _baseballDbService.GetBatterAsync(playerId);
             if (player == null)
@@ -217,6 +220,7 @@ public class BaseballController : Controller
                     return new GameStat
                     {
                         Date = g.FirstOrDefault()?.Game?.Date ?? DateTime.MinValue,
+                        SeasonName = seasons.FirstOrDefault(s => s.SeasonId == g.Key.SeasonId)?.SeasonName ?? "Unknown",
                         Seq = g.Key.GameSeq,
                         PA = g.Count(),
                         _1B = g.Count(pa => pa.Result == "1B"),
@@ -260,6 +264,7 @@ public class BaseballController : Controller
                 .Select(pa => new BestPA
                 {
                     Date = pa?.Game?.Date ?? DateTime.MinValue,
+                    SeasonName = seasons.FirstOrDefault(s => s.SeasonId == pa?.SeasonId)?.SeasonName ?? "Unknown",
                     Seq = pa?.GameSeq ?? 0,
                     Inning = pa?.Inning ?? 0,
                     PASeq = pa?.PaSeq ?? 0,
@@ -267,6 +272,9 @@ public class BaseballController : Controller
                     WPA = pa?.WPA
                 })
                 .ToList();
+
+            // 計算百分位排名和平均值
+            var (percentileRanks, seasonAverages) = await CalculatePercentileRanksAsync(playerId, seasonId, gameStats);
 
             // 建立 ViewModel
             var model = new PlayerDetailViewModel
@@ -276,7 +284,9 @@ public class BaseballController : Controller
                 Stats = new Stats
                 {
                     GameStats = gameStats,
-                    BestPAs = bestPAs
+                    BestPAs = bestPAs,
+                    PercentileRanks = percentileRanks,
+                    SeasonAverages = seasonAverages
                 },
                 SeriesList = await GetAllSeasonsAsync()
             };
@@ -291,13 +301,118 @@ public class BaseballController : Controller
     }
 
     /// <summary>
+    /// 計算球員各項指標的百分位排名和賽季平均值
+    /// </summary>
+    /// <param name="playerId">球員ID</param>
+    /// <param name="seasonId">賽季ID</param>
+    /// <param name="gameStats">球員比賽統計</param>
+    /// <returns>百分位排名字典和平均值字典</returns>
+    private async Task<(Dictionary<string, decimal>, Dictionary<string, decimal>)> CalculatePercentileRanksAsync(
+        string playerId, string? seasonId, List<GameStat> gameStats)
+    {
+        try
+        {
+            // 先檢查快取是否存在
+            var effectiveSeasonId = seasonId ?? "ALL";
+            var isCacheStale = await _rankingCacheService.IsCacheStaleAsync(effectiveSeasonId, hoursThreshold: 24);
+            
+            if (isCacheStale)
+            {
+                // 快取過期或不存在,背景更新快取
+                _logger.LogWarning($"打者快取過期或不存在,將在背景更新: {effectiveSeasonId}");
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await _rankingCacheService.UpdateBattingRankingsAsync(effectiveSeasonId);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, $"背景更新打者快取失敗: {effectiveSeasonId}");
+                    }
+                });
+            }
+
+            // 從快取讀取所有球員的統計資料
+            var allPlayerStats = await _rankingCacheService.GetBattingStatsFromCacheAsync(effectiveSeasonId);
+            
+            if (!allPlayerStats.Any())
+            {
+                _logger.LogWarning($"無法從快取讀取打者數據: {effectiveSeasonId}");
+                return (new Dictionary<string, decimal>(), new Dictionary<string, decimal>());
+            }
+
+            // 計算當前球員的數據
+            var totalABPlayer = gameStats.Sum(g => g.AB);
+            var totalHPlayer = gameStats.Sum(g => g.H);
+            var totalBBPlayer = gameStats.Sum(g => g.BB);
+            var totalHBPPlayer = gameStats.Sum(g => g.HBP);
+            var totalSFPlayer = gameStats.Sum(g => g.SF);
+            var totalHRPlayer = gameStats.Sum(g => g.HR + g.IHR);
+            var totalRBIPlayer = gameStats.Sum(g => g.RBI);
+            var totalSOPlayer = gameStats.Sum(g => g.SO);
+            var totalBasesPlayer = gameStats.Sum(g => g._1B + g._2B * 2 + g._3B * 3 + (g.HR + g.IHR) * 4);
+
+            var avgPlayer = totalABPlayer > 0 ? (decimal)totalHPlayer / totalABPlayer : 0;
+            var obpPlayer = (totalABPlayer + totalBBPlayer + totalHBPPlayer + totalSFPlayer) > 0
+                ? (decimal)(totalHPlayer + totalBBPlayer + totalHBPPlayer) / (totalABPlayer + totalBBPlayer + totalHBPPlayer + totalSFPlayer)
+                : 0;
+            var slgPlayer = totalABPlayer > 0 ? (decimal)totalBasesPlayer / totalABPlayer : 0;
+            var opsPlayer = obpPlayer + slgPlayer;
+
+            // 計算百分位排名 (PR值)
+            var percentileRanks = new Dictionary<string, decimal>();
+            percentileRanks["AVG"] = CalculatePercentile(allPlayerStats.Select(p => p.AVG).ToList(), avgPlayer);
+            percentileRanks["OBP"] = CalculatePercentile(allPlayerStats.Select(p => p.OBP).ToList(), obpPlayer);
+            percentileRanks["SLG"] = CalculatePercentile(allPlayerStats.Select(p => p.SLG).ToList(), slgPlayer);
+            percentileRanks["OPS"] = CalculatePercentile(allPlayerStats.Select(p => p.OPS).ToList(), opsPlayer);
+            percentileRanks["HR"] = CalculatePercentile(allPlayerStats.Select(p => (decimal)p.HR).ToList(), totalHRPlayer);
+            percentileRanks["RBI"] = CalculatePercentile(allPlayerStats.Select(p => (decimal)p.RBI).ToList(), totalRBIPlayer);
+            percentileRanks["SO"] = 100 - CalculatePercentile(allPlayerStats.Select(p => (decimal)p.SO).ToList(), totalSOPlayer); // SO越少越好
+            percentileRanks["BB"] = CalculatePercentile(allPlayerStats.Select(p => (decimal)p.BB).ToList(), totalBBPlayer);
+
+            // 計算賽季平均值
+            var seasonAverages = new Dictionary<string, decimal>();
+            seasonAverages["AVG"] = allPlayerStats.Average(p => p.AVG);
+            seasonAverages["OBP"] = allPlayerStats.Average(p => p.OBP);
+            seasonAverages["SLG"] = allPlayerStats.Average(p => p.SLG);
+            seasonAverages["OPS"] = allPlayerStats.Average(p => p.OPS);
+            seasonAverages["HR"] = (decimal)allPlayerStats.Average(p => p.HR);
+            seasonAverages["RBI"] = (decimal)allPlayerStats.Average(p => p.RBI);
+            seasonAverages["SO"] = (decimal)allPlayerStats.Average(p => p.SO);
+            seasonAverages["BB"] = (decimal)allPlayerStats.Average(p => p.BB);
+
+            return (percentileRanks, seasonAverages);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "計算百分位排名時發生錯誤");
+            return (new Dictionary<string, decimal>(), new Dictionary<string, decimal>());
+        }
+    }
+
+    /// <summary>
+    /// 計算百分位排名
+    /// </summary>
+    /// <param name="values">所有數值列表</param>
+    /// <param name="targetValue">目標數值</param>
+    /// <returns>百分位排名 (0-100)</returns>
+    private decimal CalculatePercentile(List<decimal> values, decimal targetValue)
+    {
+        if (!values.Any()) return 0;
+
+        var count = values.Count(v => v < targetValue);
+        return Math.Round((decimal)count / values.Count * 100, 1);
+    }
+
+    /// <summary>
     /// 初始化排行榜 ViewModel
     /// </summary>
     /// <param name="seasonId">
-    /// 賽季識別碼，格式例如 "CPBL-2024-HE"
+    /// 賽季識別碼,格式例如 "CPBL-2024-HE"
     /// </param>
     /// <param name="category">
-    /// 排行榜類別，"batting" 或 "pitching"
+    /// 排行榜類別,"batting" 或 "pitching"
     /// </param>
     /// <returns>
     /// 初始化後的 RankingsViewModel

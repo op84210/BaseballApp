@@ -162,6 +162,8 @@ public class BaseballDbService : IBaseballDbService
         {
             var query = _context.PAs
                 .Include(pa => pa.Game!)
+                    .ThenInclude(g => g.Stadium)
+                .Include(pa => pa.Game!)
                     .ThenInclude(g => g.HomeTeam)
                 .Include(pa => pa.Game!)
                     .ThenInclude(g => g.AwayTeam)
