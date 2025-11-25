@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Microsoft.AspNetCore.Mvc.Rendering;
 
 namespace BaseballApp.Models;
 
@@ -185,7 +186,7 @@ public class RankingsViewModel
     /// <summary>
     /// 可選賽季列表
     /// </summary>
-    public List<Season> Seasons { get; set; } = new();
+    public List<SelectListItem> Seasons { get; set; } = [];
 
     /// <summary>
     /// 最低合格打席數

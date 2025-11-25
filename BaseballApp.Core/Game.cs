@@ -36,6 +36,7 @@ public class Game
     public string? HomeTeamId { get; set; }
 
     // Navigation properties
+    public Season? Season { get; set; }
     public Stadium? Stadium { get; set; }
     public Team? AwayTeam { get; set; }
     public Team? HomeTeam { get; set; }

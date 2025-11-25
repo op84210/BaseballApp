@@ -37,6 +37,12 @@ switch (databaseType.ToUpper())
 // 註冊棒球數據服務
 builder.Services.AddScoped<BaseballApp.Services.IBaseballDbService, BaseballApp.Services.BaseballDbService>();
 
+// 註冊排行榜快取服務
+builder.Services.AddScoped<BaseballApp.Services.IRankingCacheService, BaseballApp.Services.RankingCacheService>();
+
+// 註冊背景服務：定期更新排行榜快取
+builder.Services.AddHostedService<BaseballApp.BackgroundServices.RankingCacheUpdateService>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -56,7 +62,9 @@ app.MapStaticAssets();
 
 app.MapControllerRoute(
     name: "default",
-    pattern: "{controller=Baseball}/{action=Rankings}/{id?}")
+    //pattern: "{controller=Baseball}/{action=Rankings}/{id?}")
+    pattern: "{controller=Baseball}/{action=Players}/{id?}")
+    //pattern: "{controller=Baseball}/{action=PlayerDetail}/{playerId=3zbEo}&{seasonId=CPBL-2024-HE}")
     .WithStaticAssets();
 
 app.MapControllers(); // 映射 /api/*

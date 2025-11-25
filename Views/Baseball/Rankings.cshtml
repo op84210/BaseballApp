@@ -29,15 +29,18 @@
         </div>
         <div class="col-auto">
             <select id="seasonSelect" name="seasonId" class="form-select" onchange="document.getElementById('seasonForm').submit();">
-                @foreach (Season s in Model.Seasons)
+                @if (Model.Seasons != null)
                 {
-                    if (s.SeasonId == Model.SeasonId)
+                    @foreach (SelectListItem s in Model.Seasons)
                     {
-                        <option value="@s.SeasonId" selected>@s.SeasonName</option>
-                    }
-                    else
-                    {
-                        <option value="@s.SeasonId">@s.SeasonName</option>
+                        if (s.Value == Model.SeasonId)
+                        {
+                            <option value="@s.Value" selected>@s.Text</option>
+                        }
+                        else
+                        {
+                            <option value="@s.Value">@s.Text</option>
+                        }
                     }
                 }
             </select>
