@@ -60,6 +60,17 @@
         </li>
     </ul>
 
+    <!-- 排行榜長條圖 -->
+    <div class="card">
+        <div class="card-header">
+            <h4>排行榜長條圖</h4>
+        </div>
+        <div class="card-body">
+            <!-- 使用 eCharts 所需的容器 -->
+            <div id="rankingChart" style="width:100%;height:420px;"></div>
+        </div>
+    </div>
+
     @if (Model.Category == BaseballApp.Models.RankingCategory.Batting)
     {
         <!-- 打者排行榜 -->
@@ -177,5 +188,37 @@
 </div>
 
 @section Scripts {
+    <!-- eCharts CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+
+    <script>
+        // 將後端 Model 資料安全序列化為前端可用的 JSON
+        @{
+            // 準備要序列化的物件
+            var category = Model.Category == BaseballApp.Models.RankingCategory.Pitching ? "pitching" : "batting";
+            var seasonId = Model.SeasonId ?? string.Empty;
+
+            var items = new List<object>();
+            if (Model.Category == BaseballApp.Models.RankingCategory.Batting)
+            {
+                foreach (var p in Model.BattingRankings)
+                {
+                    items.Add(new { name = p.PlayerName, value = p.AVG });
+                }
+            }
+            else
+            {
+                foreach (var p in Model.PitchingRankings)
+                {
+                    items.Add(new { name = p.PlayerName, value = p.ERA });
+                }
+            }
+
+            var payload = new { category = category, seasonId = seasonId, items = items };
+            string json = System.Text.Json.JsonSerializer.Serialize(payload);
+        }
+        window.rankingData = @Html.Raw(json);
+    </script>
+
     <script src="~/js/rankings.js"></script>
 }
