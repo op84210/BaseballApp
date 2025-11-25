@@ -207,9 +207,6 @@ public class BaseballController : Controller
                 return NotFound();
             }
 
-            // 取得系列賽列表
-            var seriesList = GetAllSeasonsAsync().Result;
-
             // 取得球員打席記錄（ALL 代表使用全部賽季資料）
             var paList = await _baseballDbService.GetPAAsync(batterId: playerId, seasonId: seasonId);
             
@@ -280,7 +277,8 @@ public class BaseballController : Controller
                 {
                     GameStats = gameStats,
                     BestPAs = bestPAs
-                }
+                },
+                SeriesList = await GetAllSeasonsAsync()
             };
 
             return View(model);

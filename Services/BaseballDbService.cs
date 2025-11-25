@@ -160,7 +160,12 @@ public class BaseballDbService : IBaseballDbService
     {
         try
         {
-            var query = _context.PAs.AsQueryable();
+            var query = _context.PAs
+                .Include(pa => pa.Game!)
+                    .ThenInclude(g => g.HomeTeam)
+                .Include(pa => pa.Game!)
+                    .ThenInclude(g => g.AwayTeam)
+                .AsQueryable();
 
             if (!string.IsNullOrEmpty(batterId))
             {

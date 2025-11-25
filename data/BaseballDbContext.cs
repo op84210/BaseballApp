@@ -246,28 +246,31 @@ public class BaseballDbContext : DbContext
             entity.Property(e => e.EndBases).HasColumnName("endBases");
 
             // 關聯關係：PA -> Game (複合鍵)
-            entity.HasOne<Game>()
+            entity.HasOne(pa => pa.Game)
                 .WithMany()
                 .HasForeignKey(pa => new { pa.SeasonId, pa.GameSeq })
                 .HasPrincipalKey(g => new { g.SeasonId, g.Seq })
                 .OnDelete(DeleteBehavior.Restrict);
 
             // 關聯關係：PA -> Batter
-            entity.HasOne<Batter>()
+            entity.HasOne(pa => pa.Batter)
                 .WithMany()
                 .HasForeignKey(pa => pa.BatterId)
+                .HasPrincipalKey(b => b.PlayerId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             // 關聯關係：PA -> Pitcher
-            entity.HasOne<Pitcher>()
+            entity.HasOne(pa => pa.Pitcher)
                 .WithMany()
                 .HasForeignKey(pa => pa.PitcherId)
+                .HasPrincipalKey(p => p.PlayerId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             // 關聯關係：PA -> Catcher
-            entity.HasOne<Batter>()
+            entity.HasOne(pa => pa.Catcher)
                 .WithMany()
                 .HasForeignKey(pa => pa.CatcherId)
+                .HasPrincipalKey(b => b.PlayerId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

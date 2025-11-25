@@ -1,0 +1,10 @@
+{
+  "version": "3.0",
+  "defaultProvider": "cdnjs",
+  "libraries": [
+    {
+      "library": "echarts@5.4.3",
+      "destination": "wwwroot/lib/echarts"
+    }
+  ]
+}

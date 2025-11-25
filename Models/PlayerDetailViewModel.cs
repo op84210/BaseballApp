@@ -1,9 +1,5 @@
-using System.Collections.Generic;
-using BaseballApp.Data;
-using BaseballApp.Models;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
-using SQLitePCL;
 
 namespace BaseballApp.Models;
 
@@ -20,6 +16,17 @@ public class PlayerDetailViewModel
 /// </summary>
 public class Stats
 {
+    /// <summary>
+    /// 出賽數
+    /// </summary>
+    public int Games
+    {
+        get
+        {
+            return GameStats.Count;
+        }
+    }
+
     /// <summary>
     /// 總打席數
     /// </summary>
@@ -86,6 +93,51 @@ public class Stats
         }
     }
 
+    /// <summary>
+    /// 打擊率
+    /// </summary>
+    public decimal BattingAverage
+    {
+        get
+        {
+            int totalAB = GameStats.Sum(gs => gs.AB);
+            if (totalAB == 0) return 0;
+
+            return Math.Round((decimal)Hits / totalAB, 3);
+        }
+    }
+
+    /// <summary>
+    /// 上壘率
+    /// </summary>
+    public decimal OnBasePercentage
+    {
+        get
+        {
+            int totalAB = GameStats.Sum(gs => gs.AB);
+            if (totalAB == 0) return 0;
+
+            int totalBB = Walks;
+            int totalHBP = GameStats.Sum(gs => gs.HBP);
+            return Math.Round((decimal)(Hits + totalBB + totalHBP) / (totalAB + totalBB + totalHBP), 3);
+        }
+    }
+
+    /// <summary>
+    /// 長打率
+    /// </summary>
+    public decimal SluggingPercentage
+    {
+        get
+        {
+            int totalAB = GameStats.Sum(gs => gs.AB);
+            if (totalAB == 0) return 0;
+
+            int totalBases = GameStats.Sum(gs => gs._1B + 2 * gs._2B + 3 * gs._3B + 4 * gs.HR);
+            return Math.Round((decimal)totalBases / totalAB, 3);
+        }
+    }
+
     // /// <summary>
     // /// 盜壘成功數
     // /// </summary>
@@ -104,7 +156,8 @@ public class Stats
         get
         {
             if (GameStats.Count == 0) return 0;
-            return (decimal)TotalPAs / GameStats.Count;
+
+            return Math.Round((decimal)TotalPAs / GameStats.Count, 3);
         }
     }
 
@@ -116,7 +169,7 @@ public class Stats
         get
         {
             if (GameStats.Count == 0) return 0;
-            return Hits / GameStats.Count;
+            return Math.Round((decimal)Hits / GameStats.Count, 3);
         }
     }
 
@@ -128,7 +181,7 @@ public class Stats
         get
         {
             if (HomeRuns == 0) return 0;
-            return (decimal)TotalPAs / HomeRuns;
+            return Math.Round((decimal)TotalPAs / HomeRuns, 3);
         }
     }
 
@@ -154,6 +207,11 @@ public class GameStat
     public DateTime Date { get; set; }
 
     /// <summary>
+    /// 賽季名稱
+    /// </summary>
+    public string SeasonName { get; set; } = string.Empty;
+
+    /// <summary>
     /// 比賽序號
     /// </summary>
     public int Seq { get; set; }
@@ -170,7 +228,7 @@ public class GameStat
     {
         get
         {
-            return _1B + _2B + _3B + HR;
+            return _1B + _2B + _3B + HR + IHR;
         }
     }
 
@@ -181,8 +239,8 @@ public class GameStat
     {
         get
         {
-            // 打數不包含保送、觸身球、犧牲觸擊、高飛犧牲打、不算打席
-            return PA - BB - HBP - SH - SF - IGNORE;
+            // 打數不包含：保送、觸身球、犧牲觸擊、高飛犧牲打、妨礙打擊 (IH)、不算打席 (IGNORE)
+            return PA - BB - HBP - SH - SF - IH - IGNORE;
         }
     }
 
@@ -337,6 +395,11 @@ public class BestPA
     /// 比賽日期
     /// </summary>
     public DateTime Date { get; set; }
+
+    /// <summary>
+    /// 賽季名稱
+    /// </summary>
+    public string SeasonName { get; set; } = string.Empty;
 
     /// <summary>
     /// 比賽序號
