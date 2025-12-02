@@ -10,6 +10,18 @@
         <div class="card-body">
             <form method="get" class="row g-3">
                 <div class="col-md-6">
+                    <label class="form-label">賽季</label>
+                    <select name="seasonId" class="form-select" onchange="this.form.submit()">
+                        <option value="ALL" selected="@(ViewBag.SeasonId == "ALL")">全部賽季</option>
+                        @foreach (var season in ViewBag.Seasons)
+                        {
+                            <option value="@season.SeasonId" selected="@(season.SeasonId == ViewBag.SeasonId)">
+                                @season.SeasonName
+                            </option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-6">
                     <label class="form-label">球隊</label>
                     <select name="teamId" class="form-select" onchange="this.form.submit()">
                         <option value="">全部球隊</option>
@@ -21,7 +33,6 @@
                         }
                     </select>
                 </div>
-                <input type="hidden" name="seasonId" value="@ViewBag.SeasonId" />
             </form>
         </div>
     </div>

@@ -32,6 +32,8 @@ CREATE TABLE IF NOT EXISTS tblBattingRankingCache (
     r INTEGER NOT NULL,
     so INTEGER NOT NULL,
     bb INTEGER NOT NULL,
+    hbp INTEGER NOT NULL,
+    sf INTEGER NOT NULL,
     sb INTEGER NOT NULL,
     avg REAL NOT NULL,
     obp REAL NOT NULL,

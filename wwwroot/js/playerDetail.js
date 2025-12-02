@@ -60,9 +60,9 @@
         return { AVG, OBP, SLG, OPS, HR: totalHR, RBI: totalRBI, SO: totalSO, BB: totalBB };
     }
 
-    // 渲染圖表
-    function renderCharts(seasonId) {
-        if (!seasonId || !lineChart || !radarChart) {
+    // 渲染折線圖
+    function renderLineChart(seasonId) {
+        if (!seasonId || !lineChart) {
             return;
         }
 
@@ -123,6 +123,15 @@
                 }
             ]
         });
+    }
+
+    // 渲染雷達圖
+    function renderRadarChart(seasonId) {
+        if (!seasonId || !radarChart) {
+            return;
+        }
+
+        const filteredGames = gameStatsData;
 
         // 雷達圖配置 - 顯示PR值
         if (percentileRanksData && Object.keys(percentileRanksData).length > 0) {
@@ -149,8 +158,33 @@
                 percentileRanksData.BB || 0
             ];
 
+            // 計算球員實際數值
+            const stats = calculateStats(filteredGames);
+            const playerActualValues = [
+                stats?.AVG || 0,
+                stats?.OBP || 0,
+                stats?.SLG || 0,
+                stats?.OPS || 0,
+                stats?.HR || 0,
+                stats?.RBI || 0,
+                stats?.SO || 0,
+                stats?.BB || 0
+            ];
+
             // 賽季平均PR值 (50%)
             const averagePRValues = [50, 50, 50, 50, 50, 50, 50, 50];
+
+            // 賽季平均實際數值
+            const seasonAvgActualValues = [
+                seasonAveragesData.AVG || 0,
+                seasonAveragesData.OBP || 0,
+                seasonAveragesData.SLG || 0,
+                seasonAveragesData.OPS || 0,
+                seasonAveragesData.HR || 0,
+                seasonAveragesData.RBI || 0,
+                seasonAveragesData.SO || 0,
+                seasonAveragesData.BB || 0
+            ];
 
             radarChart.setOption({
                 title: { 
@@ -163,11 +197,40 @@
                 tooltip: {
                     trigger: 'item',
                     formatter: function(params) {
-                        if (params.seriesName === '球員PR值') {
-                            const prValue = params.value[params.dataIndex];
-                            return `${prIndicators[params.dataIndex].name}: PR${prValue.toFixed(1)} (勝過${prValue.toFixed(1)}%的球員)`;
+                        const statNames = [
+                            { en: 'AVG', zh: '打擊率' },
+                            { en: 'OBP', zh: '上壘率' },
+                            { en: 'SLG', zh: '長打率' },
+                            { en: 'OPS', zh: 'OPS' },
+                            { en: 'HR', zh: '全壘打' },
+                            { en: 'RBI', zh: '打點' },
+                            { en: 'SO', zh: '三振' },
+                            { en: 'BB', zh: '保送' }
+                        ];
+
+                        if (params.name === '球員PR值') {
+                            // 顯示所有球員的能力PR值
+                            let result = '<strong>球員能力 PR值</strong><br/>';
+                            statNames.forEach((stat, i) => {
+                                const prValue = playerPRValues[i];
+                                const actualValue = playerActualValues[i];
+                                const formatValue = (stat.en === 'HR' || stat.en === 'RBI' || stat.en === 'SO' || stat.en === 'BB') 
+                                    ? actualValue.toFixed(0) 
+                                    : actualValue.toFixed(3);
+                                result += `${stat.zh}(${stat.en}): ${formatValue} | PR${prValue.toFixed(1)}<br/>`;
+                            });
+                            return result;
                         } else {
-                            return `賽季平均: PR50`;
+                            // 顯示所有賽季平均值
+                            let result = '<strong>賽季平均</strong><br/>';
+                            statNames.forEach((stat, i) => {
+                                const avgValue = seasonAvgActualValues[i];
+                                const formatValue = (stat.en === 'HR' || stat.en === 'RBI' || stat.en === 'SO' || stat.en === 'BB') 
+                                    ? avgValue.toFixed(0)
+                                    : avgValue.toFixed(3);
+                                result += `${stat.zh}(${stat.en}): ${formatValue}<br/>`;
+                            });
+                            return result;
                         }
                     }
                 },
@@ -241,6 +304,12 @@
         }
     }
 
+    // 渲染圖表 (呼叫折線圖和雷達圖)
+    function renderCharts(seasonId) {
+        renderLineChart(seasonId);
+        renderRadarChart(seasonId);
+    }
+
     // 初始化 DataTable
     function initDataTable() {
         $(document).ready(function () {
@@ -287,6 +356,8 @@
     window.PlayerDetailModule = {
         init: init,
         setupSeasonSelector: setupSeasonSelector,
-        renderCharts: renderCharts
+        renderCharts: renderCharts,
+        renderLineChart: renderLineChart,
+        renderRadarChart: renderRadarChart
     };
 })();

@@ -227,7 +227,9 @@ public class BaseballDbService : IBaseballDbService
         {
             if (string.IsNullOrEmpty(seasonId) || seasonId == "ALL")
             {
-                return await _context.Batters.ToListAsync();
+                return await _context.Batters
+                    .Include(b => b.PlayerTeams)
+                    .ToListAsync();
             }
 
             List<string> batterIds = new List<string>();
@@ -250,6 +252,7 @@ public class BaseballDbService : IBaseballDbService
             }
 
             return await _context.Batters
+                .Include(b => b.PlayerTeams)
                 .Where(b => batterIds.Contains(b.PlayerId))
                 .ToListAsync();
         }

@@ -159,15 +159,38 @@ public class BaseballController : Controller
     {
         try
         {
-            seasonId ??= "CPBL-2024-HE";
+            seasonId ??= "ALL";
 
-            var batters = await _baseballDbService.GetAllBattersAsync(seasonId);
+            var batters = await _baseballDbService.GetAllBattersAsync(seasonId == "ALL" ? null : seasonId);
             var teams = await _baseballDbService.GetAllTeamsAsync();
+            var seasons = await _baseballDbService.GetAllSeasonsAsync();
+
+            // 根據球隊篩選
+            if (!string.IsNullOrEmpty(teamId))
+            {
+                batters = batters.Where(b =>
+                {
+                    // 優先使用指定 seasonId 的球隊
+                    if (seasonId != "ALL")
+                    {
+                        var teamInSeason = b.PlayerTeams.FirstOrDefault(pt => pt.SeasonId == seasonId && pt.TeamId == teamId);
+                        if (teamInSeason != null)
+                            return true;
+                    }
+
+                    // 若無指定 seasonId 的球隊，則取最新的球隊
+                    var latestTeamFallback = b.PlayerTeams
+                        .OrderByDescending(pt => pt.StartDate)
+                        .FirstOrDefault();
+                    return latestTeamFallback?.TeamId == teamId;
+                }).ToList();
+            }
 
             ViewBag.SeasonId = seasonId;
             ViewBag.TeamId = teamId;
-            ViewBag.Batters = batters.OrderBy(b => b.PlayerNumber).ToList();
+            ViewBag.Batters = batters.OrderBy(b => int.Parse(b.PlayerNumber)).ToList();
             ViewBag.Teams = teams.ToList();
+            ViewBag.Seasons = seasons.ToList();
 
             return View();
         }
@@ -274,7 +297,7 @@ public class BaseballController : Controller
                 .ToList();
 
             // 計算百分位排名和平均值
-            var (percentileRanks, seasonAverages) = await CalculatePercentileRanksAsync(playerId, seasonId, gameStats);
+            var (percentileRanks, seasonAverages) = await CalculatePercentileRanksAsync(seasonId, gameStats);
 
             // 建立 ViewModel
             var model = new PlayerDetailViewModel
@@ -303,19 +326,17 @@ public class BaseballController : Controller
     /// <summary>
     /// 計算球員各項指標的百分位排名和賽季平均值
     /// </summary>
-    /// <param name="playerId">球員ID</param>
     /// <param name="seasonId">賽季ID</param>
     /// <param name="gameStats">球員比賽統計</param>
     /// <returns>百分位排名字典和平均值字典</returns>
     private async Task<(Dictionary<string, decimal>, Dictionary<string, decimal>)> CalculatePercentileRanksAsync(
-        string playerId, string? seasonId, List<GameStat> gameStats)
+        string? seasonId, List<GameStat> gameStats)
     {
         try
         {
             // 先檢查快取是否存在
             var effectiveSeasonId = seasonId ?? "ALL";
             var isCacheStale = await _rankingCacheService.IsCacheStaleAsync(effectiveSeasonId, hoursThreshold: 24);
-            
             if (isCacheStale)
             {
                 // 快取過期或不存在,背景更新快取
@@ -335,7 +356,6 @@ public class BaseballController : Controller
 
             // 從快取讀取所有球員的統計資料
             var allPlayerStats = await _rankingCacheService.GetBattingStatsFromCacheAsync(effectiveSeasonId);
-            
             if (!allPlayerStats.Any())
             {
                 _logger.LogWarning($"無法從快取讀取打者數據: {effectiveSeasonId}");
