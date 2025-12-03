@@ -17,6 +17,11 @@ public interface IRankingCacheService
     Task UpdatePitchingRankingsAsync(string seasonId);
 
     /// <summary>
+    /// 更新球隊賽季排行榜快取（從 tblTeamGameStats 聚合）
+    /// </summary>
+    Task UpdateTeamRankingsAsync(string? seasonId = null);
+
+    /// <summary>
     /// 更新所有賽季的排行榜快取
     /// </summary>
     Task UpdateAllRankingsAsync();
@@ -35,6 +40,31 @@ public interface IRankingCacheService
     /// 取得投手排行榜(從快取)
     /// </summary>
     Task<List<PitchingRankingItem>> GetPitchingRankingsFromCacheAsync(string seasonId, decimal minQualifiedIP = 0);
+
+    /// <summary>
+    /// 取得所有投手的統計數據(從快取,用於計算PR值)
+    /// </summary>
+    Task<List<PitchingRankingCache>> GetPitchingStatsFromCacheAsync(string seasonId);
+
+    /// <summary>
+    /// 查詢球隊賽季打者統計資料（從 tblTeamSeasonRankingCache）
+    /// </summary>
+    Task<TeamSeasonStatsDto?> GetTeamSeasonBattingStatsAsync(string seasonId, string teamId);
+
+    /// <summary>
+    /// 取得所有球隊賽季打者統計資料（用於計算球隊打者PR值）
+    /// </summary>
+    Task<List<TeamSeasonStatsDto>> GetAllTeamSeasonBattingStatsAsync(string seasonId);
+
+    /// <summary>
+    /// 查詢球隊賽季投手統計資料（從 tblTeamSeasonRankingCache）
+    /// </summary>
+    Task<TeamSeasonPitchingStatsDto?> GetTeamSeasonPitchingStatsAsync(string seasonId, string teamId);
+
+    /// <summary>
+    /// 取得所有球隊賽季投手統計資料（用於計算球隊PR值）
+    /// </summary>
+    Task<List<TeamSeasonPitchingStatsDto>> GetAllTeamSeasonPitchingStatsAsync(string seasonId);
 
     /// <summary>
     /// 檢查快取是否需要更新（超過指定小時數）
@@ -164,10 +194,20 @@ public class RankingCacheService : IRankingCacheService
                     SO = g.Sum(x => x.SO ?? 0),
                     R = g.Sum(x => x.R ?? 0),
                     ER = g.Sum(x => x.ER ?? 0),
+                    HBP = g.Sum(x => x.HB ?? 0),
+                    BF = g.Sum(x => x.BF ?? 0),
                     ERA = g.Sum(x => x.IPOuts ?? 0) > 0 ? 
                         Math.Round((decimal)g.Sum(x => x.ER ?? 0) * 27 / g.Sum(x => x.IPOuts ?? 0), 2) : 0,
                     WHIP = g.Sum(x => x.IPOuts ?? 0) > 0 ? 
-                        Math.Round((decimal)(g.Sum(x => x.H ?? 0) + g.Sum(x => x.BB ?? 0)) * 3 / g.Sum(x => x.IPOuts ?? 0), 2) : 0
+                        Math.Round((decimal)(g.Sum(x => x.H ?? 0) + g.Sum(x => x.BB ?? 0)) * 3 / g.Sum(x => x.IPOuts ?? 0), 2) : 0,
+                    K9 = g.Sum(x => x.IPOuts ?? 0) > 0 ?
+                        Math.Round((decimal)g.Sum(x => x.SO ?? 0) * 27 / g.Sum(x => x.IPOuts ?? 0), 2) : 0,
+                    BB9 = g.Sum(x => x.IPOuts ?? 0) > 0 ?
+                        Math.Round((decimal)g.Sum(x => x.BB ?? 0) * 27 / g.Sum(x => x.IPOuts ?? 0), 2) : 0,
+                    KBBRatio = g.Sum(x => x.BB ?? 0) > 0 ?
+                        Math.Round((decimal)g.Sum(x => x.SO ?? 0) / g.Sum(x => x.BB ?? 0), 2) : g.Sum(x => x.SO ?? 0),
+                    BAA = (g.Sum(x => x.BF ?? 0) - g.Sum(x => x.BB ?? 0) - g.Sum(x => x.HB ?? 0)) > 0 ?
+                        Math.Round((decimal)g.Sum(x => x.H ?? 0) / (g.Sum(x => x.BF ?? 0) - g.Sum(x => x.BB ?? 0) - g.Sum(x => x.HB ?? 0)), 3) : 0
                 })
                 .OrderBy(x => x.ERA)
                 .ThenByDescending(x => x.IP)
@@ -190,6 +230,10 @@ public class RankingCacheService : IRankingCacheService
                     L = 0,
                     ERA = p.ERA,
                     WHIP = p.WHIP,
+                    K9 = p.K9,
+                    BB9 = p.BB9,
+                    KBBRatio = p.KBBRatio,
+                    BAA = p.BAA,
                     UpdatedAt = DateTime.Now
                 })
                 .ToList();
@@ -213,6 +257,100 @@ public class RankingCacheService : IRankingCacheService
         }
     }
 
+    public async Task UpdateTeamRankingsAsync(string? seasonId = null)
+    {
+        try
+        {
+            _logger.LogInformation($"開始更新球隊排行榜快取: {seasonId ?? "ALL"}");
+
+            // 執行 SQL 更新球隊快取（與 DataEtl 的 RebuildTeamSeasonRankingCache 相同邏輯）
+            var sql = @"
+                -- 清除指定賽季或全部賽季的快取
+                DELETE FROM tblTeamSeasonRankingCache
+                WHERE {0};
+
+                INSERT INTO tblTeamSeasonRankingCache(
+                    seasonId, teamId, teamName,
+                    rank, gamesPlayed, wins, losses,
+                    runsScored, runsAllowed,
+                    pa, ab, h, twoB, threeB, hr, bb, so, hbp, sf, sb, cs,
+                    ipOuts, er, hitsAllowed, bbAllowed, soPitching, hrAllowed,
+                    winPct, avg, obp, slg, ops, era, fip, runDiff, updatedAt
+                )
+                SELECT
+                    tgs.seasonId,
+                    tgs.teamId,
+                    MAX(tgs.teamName) as teamName,
+                    0 as rank,
+                    COUNT(*) as gamesPlayed,
+                    SUM(CASE WHEN tgs.teamScore > tgs.opponentScore THEN 1 ELSE 0 END) as wins,
+                    SUM(CASE WHEN tgs.teamScore < tgs.opponentScore THEN 1 ELSE 0 END) as losses,
+                    SUM(tgs.teamScore) as runsScored,
+                    SUM(tgs.opponentScore) as runsAllowed,
+                    SUM(tgs.pa) as pa,
+                    SUM(tgs.ab) as ab,
+                    SUM(tgs.h) as h,
+                    SUM(tgs.twoB) as twoB,
+                    SUM(tgs.threeB) as threeB,
+                    SUM(tgs.hr) as hr,
+                    SUM(tgs.bb) as bb,
+                    SUM(tgs.so) as so,
+                    SUM(tgs.hbp) as hbp,
+                    SUM(tgs.sf) as sf,
+                    SUM(tgs.sb) as sb,
+                    SUM(tgs.cs) as cs,
+                    SUM(tgs.ipOuts) as ipOuts,
+                    SUM(tgs.er) as er,
+                    SUM(tgs.hitsAllowed) as hitsAllowed,
+                    SUM(tgs.bbAllowed) as bbAllowed,
+                    SUM(tgs.soPitching) as soPitching,
+                    SUM(tgs.hrAllowed) as hrAllowed,
+                    CASE WHEN COUNT(*) > 0 THEN CAST(SUM(CASE WHEN tgs.teamScore > tgs.opponentScore THEN 1 ELSE 0 END) AS REAL) / COUNT(*) ELSE 0 END as winPct,
+                    CASE WHEN SUM(tgs.ab) > 0 THEN CAST(SUM(tgs.h) AS REAL) / SUM(tgs.ab) ELSE 0 END as avg,
+                    CASE WHEN (SUM(tgs.ab) + SUM(tgs.bb) + SUM(tgs.hbp) + SUM(tgs.sf)) > 0
+                         THEN CAST((SUM(tgs.h) + SUM(tgs.bb) + SUM(tgs.hbp)) AS REAL) / (SUM(tgs.ab) + SUM(tgs.bb) + SUM(tgs.hbp) + SUM(tgs.sf))
+                         ELSE 0 END as obp,
+                    CASE WHEN SUM(tgs.ab) > 0
+                         THEN CAST((SUM(tgs.h) - (SUM(tgs.twoB)+SUM(tgs.threeB)+SUM(tgs.hr)) + 2*SUM(tgs.twoB) + 3*SUM(tgs.threeB) + 4*SUM(tgs.hr)) AS REAL) / SUM(tgs.ab)
+                         ELSE 0 END as slg,
+                    0 as ops,
+                    CASE WHEN SUM(tgs.ipOuts) > 0 THEN 9.0 * CAST(SUM(tgs.er) AS REAL) / (CAST(SUM(tgs.ipOuts) AS REAL) / 3.0) ELSE 0 END as era,
+                    NULL as fip,
+                    SUM(tgs.teamScore) - SUM(tgs.opponentScore) as runDiff,
+                    strftime('%Y-%m-%dT%H:%M:%SZ','now') as updatedAt
+                FROM tblTeamGameStats tgs
+                WHERE {1}
+                GROUP BY tgs.seasonId, tgs.teamId;
+
+                UPDATE tblTeamSeasonRankingCache
+                SET ops = obp + slg
+                WHERE {0};
+
+                WITH ranked AS (
+                    SELECT seasonId, teamId,
+                           ROW_NUMBER() OVER (PARTITION BY seasonId ORDER BY winPct DESC, runDiff DESC) AS rnk
+                    FROM tblTeamSeasonRankingCache
+                    WHERE {0}
+                )
+                UPDATE tblTeamSeasonRankingCache AS t
+                SET rank = (SELECT rnk FROM ranked WHERE ranked.seasonId = t.seasonId AND ranked.teamId = t.teamId)
+                WHERE {0};
+            ";
+
+            var whereClause = string.IsNullOrEmpty(seasonId) ? "1=1" : $"seasonId = '{seasonId}'";
+            var formattedSql = string.Format(sql, whereClause, whereClause);
+
+            await _context.Database.ExecuteSqlRawAsync(formattedSql);
+
+            _logger.LogInformation($"球隊排行榜快取更新完成: {seasonId ?? "ALL"}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"更新球隊排行榜快取失敗: {seasonId}");
+            throw;
+        }
+    }
+
     public async Task UpdateAllRankingsAsync()
     {
         try
@@ -230,6 +368,9 @@ public class RankingCacheService : IRankingCacheService
             // 更新 "ALL" (全部賽季)
             await UpdateBattingRankingsAsync("ALL");
             await UpdatePitchingRankingsAsync("ALL");
+
+            // 更新球隊排行榜（所有賽季）
+            await UpdateTeamRankingsAsync();
 
             _logger.LogInformation("所有賽季的排行榜快取更新完成");
         }
@@ -335,6 +476,197 @@ public class RankingCacheService : IRankingCacheService
         {
             _logger.LogError(ex, $"從快取讀取投手排行榜時發生錯誤：{seasonId}");
             return new List<PitchingRankingItem>();
+        }
+    }
+
+    public async Task<List<PitchingRankingCache>> GetPitchingStatsFromCacheAsync(string seasonId)
+    {
+        try
+        {
+            return await _context.PitchingRankingCaches
+                .Where(c => c.SeasonId == seasonId)
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"從快取讀取投手統計數據時發生錯誤：{seasonId}");
+            return new List<PitchingRankingCache>();
+        }
+    }
+
+    public async Task<TeamSeasonStatsDto?> GetTeamSeasonBattingStatsAsync(string seasonId, string teamId)
+    {
+        try
+        {
+            var result = await _context.Database
+                .SqlQuery<TeamSeasonStatsQueryResult>($@"
+                    SELECT 
+                        avg, obp, slg, ops,
+                        CAST(hr AS REAL) as hr,
+                        CAST(runsScored AS REAL) / NULLIF(gamesPlayed, 0) as rbi,
+                        CAST(so AS REAL) / NULLIF(gamesPlayed, 0) as so,
+                        CAST(bb AS REAL) / NULLIF(gamesPlayed, 0) as bb
+                    FROM tblTeamSeasonRankingCache
+                    WHERE seasonId = {seasonId} AND teamId = {teamId}
+                ")
+                .FirstOrDefaultAsync();
+
+            if (result == null)
+            {
+                return null;
+            }
+
+            return new TeamSeasonStatsDto
+            {
+                AVG = (decimal)(result.Avg ?? 0),
+                OBP = (decimal)(result.Obp ?? 0),
+                SLG = (decimal)(result.Slg ?? 0),
+                OPS = (decimal)(result.Ops ?? 0),
+                HR = (decimal)(result.Hr ?? 0),
+                RBI = (decimal)(result.Rbi ?? 0),
+                SO = (decimal)(result.So ?? 0),
+                BB = (decimal)(result.Bb ?? 0)
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"查詢球隊打者統計資料時發生錯誤: seasonId={seasonId}, teamId={teamId}");
+            return null;
+        }
+    }
+
+    public async Task<TeamSeasonPitchingStatsDto?> GetTeamSeasonPitchingStatsAsync(string seasonId, string teamId)
+    {
+        try
+        {
+            var result = await _context.Database
+                .SqlQuery<TeamSeasonPitchingStatsQueryResult>($@"
+                    SELECT 
+                        era, 
+                        CASE WHEN ipOuts > 0 
+                            THEN CAST((hitsAllowed + bbAllowed) AS REAL) * 3 / ipOuts 
+                            ELSE 0 END as whip,
+                        CASE WHEN ipOuts > 0 
+                            THEN CAST(soPitching AS REAL) * 27 / ipOuts 
+                            ELSE 0 END as k9,
+                        CASE WHEN ipOuts > 0 
+                            THEN CAST(bbAllowed AS REAL) * 27 / ipOuts 
+                            ELSE 0 END as bb9,
+                        CASE WHEN bbAllowed > 0 
+                            THEN CAST(soPitching AS REAL) / bbAllowed 
+                            ELSE CAST(soPitching AS REAL) END as kbbRatio,
+                        CASE WHEN (pa - bbAllowed - COALESCE(hbp, 0)) > 0
+                            THEN CAST(hitsAllowed AS REAL) / (pa - bbAllowed - COALESCE(hbp, 0))
+                            ELSE 0 END as baa,
+                        CAST(soPitching AS REAL) / NULLIF(gamesPlayed, 0) as so
+                    FROM tblTeamSeasonRankingCache
+                    WHERE seasonId = {seasonId} AND teamId = {teamId}
+                ")
+                .FirstOrDefaultAsync();
+
+            if (result == null)
+            {
+                return null;
+            }
+
+            return new TeamSeasonPitchingStatsDto
+            {
+                ERA = (decimal)(result.Era ?? 0),
+                WHIP = (decimal)(result.Whip ?? 0),
+                K9 = (decimal)(result.K9 ?? 0),
+                BB9 = (decimal)(result.Bb9 ?? 0),
+                KBBRatio = (decimal)(result.KbbRatio ?? 0),
+                BAA = (decimal)(result.Baa ?? 0),
+                SO = (decimal)(result.So ?? 0)
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"查詢球隊投手統計資料時發生錯誤: seasonId={seasonId}, teamId={teamId}");
+            return null;
+        }
+    }
+
+    public async Task<List<TeamSeasonStatsDto>> GetAllTeamSeasonBattingStatsAsync(string seasonId)
+    {
+        try
+        {
+            var results = await _context.Database
+                .SqlQuery<TeamSeasonStatsQueryResult>($@"
+                    SELECT 
+                        avg, obp, slg, ops,
+                        CAST(hr AS REAL) as hr,
+                        CAST(runsScored AS REAL) / NULLIF(gamesPlayed, 0) as rbi,
+                        CAST(so AS REAL) / NULLIF(gamesPlayed, 0) as so,
+                        CAST(bb AS REAL) / NULLIF(gamesPlayed, 0) as bb
+                    FROM tblTeamSeasonRankingCache
+                    WHERE seasonId = {seasonId}
+                ")
+                .ToListAsync();
+
+            return results.Select(r => new TeamSeasonStatsDto
+            {
+                AVG = (decimal)(r.Avg ?? 0),
+                OBP = (decimal)(r.Obp ?? 0),
+                SLG = (decimal)(r.Slg ?? 0),
+                OPS = (decimal)(r.Ops ?? 0),
+                HR = (decimal)(r.Hr ?? 0),
+                RBI = (decimal)(r.Rbi ?? 0),
+                SO = (decimal)(r.So ?? 0),
+                BB = (decimal)(r.Bb ?? 0)
+            }).ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"查詢所有球隊打者統計資料時發生錯誤: seasonId={seasonId}");
+            return new List<TeamSeasonStatsDto>();
+        }
+    }
+
+    public async Task<List<TeamSeasonPitchingStatsDto>> GetAllTeamSeasonPitchingStatsAsync(string seasonId)
+    {
+        try
+        {
+            var results = await _context.Database
+                .SqlQuery<TeamSeasonPitchingStatsQueryResult>($@"
+                    SELECT 
+                        era, 
+                        CASE WHEN ipOuts > 0 
+                            THEN CAST((hitsAllowed + bbAllowed) AS REAL) * 3 / ipOuts 
+                            ELSE 0 END as whip,
+                        CASE WHEN ipOuts > 0 
+                            THEN CAST(soPitching AS REAL) * 27 / ipOuts 
+                            ELSE 0 END as k9,
+                        CASE WHEN ipOuts > 0 
+                            THEN CAST(bbAllowed AS REAL) * 27 / ipOuts 
+                            ELSE 0 END as bb9,
+                        CASE WHEN bbAllowed > 0 
+                            THEN CAST(soPitching AS REAL) / bbAllowed 
+                            ELSE CAST(soPitching AS REAL) END as kbbRatio,
+                        CASE WHEN (pa - bbAllowed - COALESCE(hbp, 0)) > 0
+                            THEN CAST(hitsAllowed AS REAL) / (pa - bbAllowed - COALESCE(hbp, 0))
+                            ELSE 0 END as baa,
+                        CAST(soPitching AS REAL) / NULLIF(gamesPlayed, 0) as so
+                    FROM tblTeamSeasonRankingCache
+                    WHERE seasonId = {seasonId}
+                ")
+                .ToListAsync();
+
+            return results.Select(r => new TeamSeasonPitchingStatsDto
+            {
+                ERA = (decimal)(r.Era ?? 0),
+                WHIP = (decimal)(r.Whip ?? 0),
+                K9 = (decimal)(r.K9 ?? 0),
+                BB9 = (decimal)(r.Bb9 ?? 0),
+                KBBRatio = (decimal)(r.KbbRatio ?? 0),
+                BAA = (decimal)(r.Baa ?? 0),
+                SO = (decimal)(r.So ?? 0)
+            }).ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"查詢所有球隊投手統計資料時發生錯誤: seasonId={seasonId}");
+            return new List<TeamSeasonPitchingStatsDto>();
         }
     }
 

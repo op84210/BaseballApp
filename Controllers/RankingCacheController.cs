@@ -59,7 +59,47 @@ public class RankingCacheController : ControllerBase
     }
 
     /// <summary>
-    /// 手動更新所有賽季的排行榜快取
+    /// 手動更新球隊賽季排行榜快取
+    /// </summary>
+    /// <param name="seasonId">賽季ID（可選，不提供則更新所有賽季）</param>
+    [HttpPost("team")]
+    public async Task<IActionResult> UpdateTeamRankings([FromQuery] string? seasonId = null)
+    {
+        try
+        {
+            _logger.LogInformation($"手動觸發更新球隊排行榜快取：{seasonId ?? "ALL"}");
+            await _rankingCacheService.UpdateTeamRankingsAsync(seasonId);
+            return Ok(new { message = $"球隊排行榜快取已更新：{seasonId ?? "ALL"}" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"更新球隊排行榜快取失敗：{seasonId}");
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// 手動更新指定賽季的球隊排行榜快取（路徑參數版本）
+    /// </summary>
+    /// <param name="seasonId">賽季ID，例如：CPBL-2024-HE</param>
+    [HttpPost("team/{seasonId}")]
+    public async Task<IActionResult> UpdateTeamRankingsBySeason(string seasonId)
+    {
+        try
+        {
+            _logger.LogInformation($"手動觸發更新球隊排行榜快取：{seasonId}");
+            await _rankingCacheService.UpdateTeamRankingsAsync(seasonId);
+            return Ok(new { message = $"球隊排行榜快取已更新：{seasonId}" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"更新球隊排行榜快取失敗：{seasonId}");
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// 手動更新所有賽季的排行榜快取（包含球員與球隊）
     /// </summary>
     [HttpPost("all")]
     public async Task<IActionResult> UpdateAllRankings()

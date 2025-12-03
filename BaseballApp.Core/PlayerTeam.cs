@@ -47,6 +47,7 @@ public class PlayerTeam
     
     // Navigation properties
     public Batter? Batter { get; set; }
+    public Pitcher? Pitcher { get; set; }
     public Team? Team { get; set; }
     public Season? Season { get; set; }
 }

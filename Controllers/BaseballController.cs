@@ -188,7 +188,7 @@ public class BaseballController : Controller
 
             ViewBag.SeasonId = seasonId;
             ViewBag.TeamId = teamId;
-            ViewBag.Batters = batters.OrderBy(b => int.Parse(b.PlayerNumber)).ToList();
+            ViewBag.Batters = batters.OrderBy(b => int.TryParse(b.PlayerNumber, out var num) ? num : 999).ToList();
             ViewBag.Teams = teams.ToList();
             ViewBag.Seasons = seasons.ToList();
 
@@ -223,95 +223,25 @@ public class BaseballController : Controller
                 seasonId = null; // 使用 null 表示生涯
             }
 
-            // 取得賽季資料
-            var seasons = await _baseballDbService.GetAllSeasonsAsync();
+            // 讀取賽季列表（供下拉選單）
+            var seriesList = await GetAllSeasonsAsync();
 
-            // 取得球員資料
-            var player = await _baseballDbService.GetBatterAsync(playerId);
-            if (player == null)
+            // 生成打者與投手詳細資料
+            var batterDetail = await BuildBatterDetail(playerId, seasonId);
+            var pitcherDetail = await BuildPitcherDetail(playerId, seasonId);
+
+            // 若皆為 null，視為不存在
+            if (batterDetail == null && pitcherDetail == null)
             {
                 return NotFound();
             }
 
-            // 取得球員打席記錄（ALL 代表使用全部賽季資料）
-            var paList = await _baseballDbService.GetPAAsync(batterId: playerId, seasonId: seasonId);
-            
-            // 打擊數據 (按比賽統計)
-            var gameStats = paList
-                .GroupBy(pa => new { pa.SeasonId, pa.GameSeq })
-                .Select(g => {
-                    return new GameStat
-                    {
-                        Date = g.FirstOrDefault()?.Game?.Date ?? DateTime.MinValue,
-                        SeasonName = seasons.FirstOrDefault(s => s.SeasonId == g.Key.SeasonId)?.SeasonName ?? "Unknown",
-                        Seq = g.Key.GameSeq,
-                        PA = g.Count(),
-                        _1B = g.Count(pa => pa.Result == "1B"),
-                        _2B = g.Count(pa => pa.Result == "2B"),
-                        _3B = g.Count(pa => pa.Result == "3B"),
-                        HR = g.Count(pa => pa.Result == "HR"),
-                        IHR = g.Count(pa => pa.Result == "IHR"),
-                        SO = g.Count(pa => pa.Result == "SO"),
-                        uBB = g.Count(pa => pa.Result == "uBB"),
-                        IBB = g.Count(pa => pa.Result == "IBB"),
-                        HBP = g.Count(pa => pa.Result == "HBP"),
-                        GO = g.Count(pa => pa.Result == "GO"),
-                        FO = g.Count(pa => pa.Result == "FO"),
-                        FC = g.Count(pa => pa.Result == "FC"),
-                        E = g.Count(pa => pa.Result == "E"),
-                        SH = g.Count(pa => pa.Result == "SH"),
-                        SF = g.Count(pa => pa.Result == "SF"),
-                        GIDP = g.Count(pa => pa.Result == "GIDP"),
-                        DP = g.Count(pa => pa.Result == "DP"),
-                        TP = g.Count(pa => pa.Result == "TP"),
-                        IH = g.Count(pa => pa.Result == "IH"),
-                        IR = g.Count(pa => pa.Result == "IR"),
-                        ID = g.Count(pa => pa.Result == "ID"),
-                        IGNORE = g.Count(pa => pa.Result == "IGNORE"),
-                        RBI = g.Sum(pa => pa.RBI ?? 0),
-                        Opponent = (g.FirstOrDefault()?.Game?.HomeTeam == player.PlayerTeams ?
-                            g.FirstOrDefault()?.Game?.AwayTeam?.TeamName : 
-                            g.FirstOrDefault()?.Game?.HomeTeam?.TeamName) ?? 
-                            "Unknown",
-                        IsHome = g.FirstOrDefault()?.Game?.HomeTeam == player.PlayerTeams
-                    };
-                })
-                .OrderBy(x => x.Date)
-                .ToList();
-
-            // 最佳打席
-            var bestPAs = paList
-                .Where(pa => pa.WPA.HasValue)
-                .OrderByDescending(pa => pa.WPA)
-                .Take(5)
-                .Select(pa => new BestPA
-                {
-                    Date = pa?.Game?.Date ?? DateTime.MinValue,
-                    SeasonName = seasons.FirstOrDefault(s => s.SeasonId == pa?.SeasonId)?.SeasonName ?? "Unknown",
-                    Seq = pa?.GameSeq ?? 0,
-                    Inning = pa?.Inning ?? 0,
-                    PASeq = pa?.PaSeq ?? 0,
-                    PAResult = pa?.Result ?? string.Empty,
-                    WPA = pa?.WPA
-                })
-                .ToList();
-
-            // 計算百分位排名和平均值
-            var (percentileRanks, seasonAverages) = await CalculatePercentileRanksAsync(seasonId, gameStats);
-
-            // 建立 ViewModel
             var model = new PlayerDetailViewModel
             {
                 SeasonId = seasonId ?? "ALL",
-                Player = player,
-                Stats = new Stats
-                {
-                    GameStats = gameStats,
-                    BestPAs = bestPAs,
-                    PercentileRanks = percentileRanks,
-                    SeasonAverages = seasonAverages
-                },
-                SeriesList = await GetAllSeasonsAsync()
+                SeriesList = seriesList,
+                BatterDetail = batterDetail,
+                PitcherDetail = pitcherDetail
             };
 
             return View(model);
@@ -323,108 +253,156 @@ public class BaseballController : Controller
         }
     }
 
-    /// <summary>
-    /// 計算球員各項指標的百分位排名和賽季平均值
-    /// </summary>
-    /// <param name="seasonId">賽季ID</param>
-    /// <param name="gameStats">球員比賽統計</param>
-    /// <returns>百分位排名字典和平均值字典</returns>
-    private async Task<(Dictionary<string, decimal>, Dictionary<string, decimal>)> CalculatePercentileRanksAsync(
-        string? seasonId, List<GameStat> gameStats)
+    // 建立打者詳細資料
+    private async Task<BatterDetailModel?> BuildBatterDetail(string playerId, string? seasonId)
     {
-        try
-        {
-            // 先檢查快取是否存在
-            var effectiveSeasonId = seasonId ?? "ALL";
-            var isCacheStale = await _rankingCacheService.IsCacheStaleAsync(effectiveSeasonId, hoursThreshold: 24);
-            if (isCacheStale)
+        var batter = await _baseballDbService.GetBatterAsync(playerId);
+        if (batter == null) return null;
+
+        var seasons = await _baseballDbService.GetAllSeasonsAsync();
+        var paList = await _baseballDbService.GetPAAsync(batterId: playerId, seasonId: seasonId);
+
+        var batterGameStats = paList
+            .GroupBy(pa => new { pa.SeasonId, pa.GameSeq })
+            .Select(g => new BatterGameStat
             {
-                // 快取過期或不存在,背景更新快取
-                _logger.LogWarning($"打者快取過期或不存在,將在背景更新: {effectiveSeasonId}");
-                _ = Task.Run(async () =>
+                Date = g.FirstOrDefault()?.Game?.Date ?? DateTime.MinValue,
+                SeasonName = seasons.FirstOrDefault(s => s.SeasonId == g.Key.SeasonId)?.SeasonName ?? "Unknown",
+                Seq = g.Key.GameSeq,
+                PA = g.Count(),
+                _1B = g.Count(pa => pa.Result == "1B"),
+                _2B = g.Count(pa => pa.Result == "2B"),
+                _3B = g.Count(pa => pa.Result == "3B"),
+                HR = g.Count(pa => pa.Result == "HR"),
+                IHR = g.Count(pa => pa.Result == "IHR"),
+                SO = g.Count(pa => pa.Result == "SO"),
+                uBB = g.Count(pa => pa.Result == "uBB"),
+                IBB = g.Count(pa => pa.Result == "IBB"),
+                HBP = g.Count(pa => pa.Result == "HBP"),
+                GO = g.Count(pa => pa.Result == "GO"),
+                FO = g.Count(pa => pa.Result == "FO"),
+                FC = g.Count(pa => pa.Result == "FC"),
+                E = g.Count(pa => pa.Result == "E"),
+                SH = g.Count(pa => pa.Result == "SH"),
+                SF = g.Count(pa => pa.Result == "SF"),
+                GIDP = g.Count(pa => pa.Result == "GIDP"),
+                DP = g.Count(pa => pa.Result == "DP"),
+                TP = g.Count(pa => pa.Result == "TP"),
+                IH = g.Count(pa => pa.Result == "IH"),
+                IR = g.Count(pa => pa.Result == "IR"),
+                ID = g.Count(pa => pa.Result == "ID"),
+                IGNORE = g.Count(pa => pa.Result == "IGNORE"),
+                RBI = g.Sum(pa => pa.RBI ?? 0),
+                Opponent = (g.FirstOrDefault()?.Game?.HomeTeam == batter.PlayerTeams ?
+                    g.FirstOrDefault()?.Game?.AwayTeam?.TeamName : 
+                    g.FirstOrDefault()?.Game?.HomeTeam?.TeamName) ?? 
+                    "Unknown",
+                IsHome = g.FirstOrDefault()?.Game?.HomeTeam == batter.PlayerTeams
+            })
+            .OrderBy(x => x.Date)
+            .ToList();
+
+        var bestPAs = paList
+            .Where(pa => pa.WPA.HasValue)
+            .OrderByDescending(pa => pa.WPA)
+            .Take(5)
+            .Select(pa => new BestPA
+            {
+                Date = pa?.Game?.Date ?? DateTime.MinValue,
+                SeasonName = seasons.FirstOrDefault(s => s.SeasonId == pa?.SeasonId)?.SeasonName ?? "Unknown",
+                Seq = pa?.GameSeq ?? 0,
+                Inning = pa?.Inning ?? 0,
+                PASeq = pa?.PaSeq ?? 0,
+                PAResult = pa?.Result ?? string.Empty,
+                WPA = pa?.WPA
+            })
+            .ToList();
+
+        return new BatterDetailModel
+        {
+            Batter = batter,
+            Stats = new BatterStats
+            {
+                GameStats = batterGameStats,
+                BestPAs = bestPAs
+            }
+        };
+    }
+
+    // 建立投手詳細資料
+    private async Task<PitcherDetailModel?> BuildPitcherDetail(string playerId, string? seasonId)
+    {
+        var pitcher = await _baseballDbService.GetPitcherAsync(playerId);
+        if (pitcher == null) return null;
+
+        var pitcherBoxes = await _baseballDbService.GetPitcherBoxAsync(seasonId: seasonId);
+        var seasonsDict = (await _baseballDbService.GetAllSeasonsAsync()).ToDictionary(s => s.SeasonId, s => s.SeasonName ?? s.SeasonId);
+
+        var pitcherGameStats = pitcherBoxes
+            .Where(pb => pb.PlayerId == playerId)
+            .GroupBy(pb => new { pb.SeasonId, pb.GameSeq })
+            .Select(g =>
+            {
+                var first = g.FirstOrDefault();
+                int ipOuts = g.Sum(x => x.IPOuts ?? 0);
+                int er = g.Sum(x => x.ER ?? 0);
+                int h = g.Sum(x => x.H ?? 0);
+                int bb = g.Sum(x => x.BB ?? 0);
+                int so = g.Sum(x => x.SO ?? 0);
+                int hr = g.Sum(x => x.HR ?? 0);
+                int np = g.Sum(x => x.NP ?? 0);
+                int bf = g.Sum(x => x.BF ?? 0);
+                int r = g.Sum(x => x.R ?? 0);
+                decimal era = ipOuts > 0 ? Math.Round((decimal)er * 27 / ipOuts, 2) : 0;
+
+                return new PitcherGameStat
                 {
-                    try
-                    {
-                        await _rankingCacheService.UpdateBattingRankingsAsync(effectiveSeasonId);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, $"背景更新打者快取失敗: {effectiveSeasonId}");
-                    }
-                });
-            }
+                    Date = first?.Game?.Date ?? DateTime.MinValue,
+                    SeasonName = seasonsDict.TryGetValue(g.Key.SeasonId!, out var sn) ? sn : (g.Key.SeasonId ?? "Unknown"),
+                    Seq = g.Key.GameSeq,
+                    Opponent = (first?.Game?.HomeTeamId == first?.Game?.AwayTeamId ? first?.Game?.AwayTeam?.TeamName : first?.Game?.HomeTeam?.TeamName) ?? "Unknown",
+                    IsStarter = false,
+                    IPOuts = ipOuts,
+                    NP = np,
+                    H = h,
+                    HR = hr,
+                    SO = so,
+                    BB = bb,
+                    R = r,
+                    ER = er,
+                    BF = bf
+                };
+            })
+            .OrderBy(x => x.Date)
+            .ToList();
 
-            // 從快取讀取所有球員的統計資料
-            var allPlayerStats = await _rankingCacheService.GetBattingStatsFromCacheAsync(effectiveSeasonId);
-            if (!allPlayerStats.Any())
+        var bestPitchingPerformances = pitcherGameStats
+            .Select(g => new BestPitchingPerformance
             {
-                _logger.LogWarning($"無法從快取讀取打者數據: {effectiveSeasonId}");
-                return (new Dictionary<string, decimal>(), new Dictionary<string, decimal>());
-            }
+                Date = g.Date,
+                SeasonName = g.SeasonName,
+                Seq = g.Seq,
+                Opponent = g.Opponent,
+                IP = g.IP,
+                SO = g.SO,
+                ERA = g.ERA,
+                Score = (decimal)g.IP * 10m - (decimal)g.ERA * 2m + (decimal)g.SO * 0.5m
+            })
+            .OrderByDescending(x => x.Score)
+            .Take(5)
+            .ToList();
 
-            // 計算當前球員的數據
-            var totalABPlayer = gameStats.Sum(g => g.AB);
-            var totalHPlayer = gameStats.Sum(g => g.H);
-            var totalBBPlayer = gameStats.Sum(g => g.BB);
-            var totalHBPPlayer = gameStats.Sum(g => g.HBP);
-            var totalSFPlayer = gameStats.Sum(g => g.SF);
-            var totalHRPlayer = gameStats.Sum(g => g.HR + g.IHR);
-            var totalRBIPlayer = gameStats.Sum(g => g.RBI);
-            var totalSOPlayer = gameStats.Sum(g => g.SO);
-            var totalBasesPlayer = gameStats.Sum(g => g._1B + g._2B * 2 + g._3B * 3 + (g.HR + g.IHR) * 4);
-
-            var avgPlayer = totalABPlayer > 0 ? (decimal)totalHPlayer / totalABPlayer : 0;
-            var obpPlayer = (totalABPlayer + totalBBPlayer + totalHBPPlayer + totalSFPlayer) > 0
-                ? (decimal)(totalHPlayer + totalBBPlayer + totalHBPPlayer) / (totalABPlayer + totalBBPlayer + totalHBPPlayer + totalSFPlayer)
-                : 0;
-            var slgPlayer = totalABPlayer > 0 ? (decimal)totalBasesPlayer / totalABPlayer : 0;
-            var opsPlayer = obpPlayer + slgPlayer;
-
-            // 計算百分位排名 (PR值)
-            var percentileRanks = new Dictionary<string, decimal>();
-            percentileRanks["AVG"] = CalculatePercentile(allPlayerStats.Select(p => p.AVG).ToList(), avgPlayer);
-            percentileRanks["OBP"] = CalculatePercentile(allPlayerStats.Select(p => p.OBP).ToList(), obpPlayer);
-            percentileRanks["SLG"] = CalculatePercentile(allPlayerStats.Select(p => p.SLG).ToList(), slgPlayer);
-            percentileRanks["OPS"] = CalculatePercentile(allPlayerStats.Select(p => p.OPS).ToList(), opsPlayer);
-            percentileRanks["HR"] = CalculatePercentile(allPlayerStats.Select(p => (decimal)p.HR).ToList(), totalHRPlayer);
-            percentileRanks["RBI"] = CalculatePercentile(allPlayerStats.Select(p => (decimal)p.RBI).ToList(), totalRBIPlayer);
-            percentileRanks["SO"] = 100 - CalculatePercentile(allPlayerStats.Select(p => (decimal)p.SO).ToList(), totalSOPlayer); // SO越少越好
-            percentileRanks["BB"] = CalculatePercentile(allPlayerStats.Select(p => (decimal)p.BB).ToList(), totalBBPlayer);
-
-            // 計算賽季平均值
-            var seasonAverages = new Dictionary<string, decimal>();
-            seasonAverages["AVG"] = allPlayerStats.Average(p => p.AVG);
-            seasonAverages["OBP"] = allPlayerStats.Average(p => p.OBP);
-            seasonAverages["SLG"] = allPlayerStats.Average(p => p.SLG);
-            seasonAverages["OPS"] = allPlayerStats.Average(p => p.OPS);
-            seasonAverages["HR"] = (decimal)allPlayerStats.Average(p => p.HR);
-            seasonAverages["RBI"] = (decimal)allPlayerStats.Average(p => p.RBI);
-            seasonAverages["SO"] = (decimal)allPlayerStats.Average(p => p.SO);
-            seasonAverages["BB"] = (decimal)allPlayerStats.Average(p => p.BB);
-
-            return (percentileRanks, seasonAverages);
-        }
-        catch (Exception ex)
+        return new PitcherDetailModel
         {
-            _logger.LogError(ex, "計算百分位排名時發生錯誤");
-            return (new Dictionary<string, decimal>(), new Dictionary<string, decimal>());
-        }
+            Pitcher = pitcher,
+            Stats = new PitcherStats
+            {
+                GameStats = pitcherGameStats,
+                BestPerformances = bestPitchingPerformances
+            }
+        };
     }
-
-    /// <summary>
-    /// 計算百分位排名
-    /// </summary>
-    /// <param name="values">所有數值列表</param>
-    /// <param name="targetValue">目標數值</param>
-    /// <returns>百分位排名 (0-100)</returns>
-    private decimal CalculatePercentile(List<decimal> values, decimal targetValue)
-    {
-        if (!values.Any()) return 0;
-
-        var count = values.Count(v => v < targetValue);
-        return Math.Round((decimal)count / values.Count * 100, 1);
-    }
-
+   
     /// <summary>
     /// 初始化排行榜 ViewModel
     /// </summary>

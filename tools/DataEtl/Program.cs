@@ -173,6 +173,162 @@ class Program
 
         // 建立 Code Tables
         CreateCodeTables(conn);
+
+        // 建立 Ranking Cache 與團隊逐場事實表（與 InitRankingCache 合併）
+        CreateRankingCacheTables(conn);
+    }
+
+    /// <summary>
+    /// 建立排行榜快取與球隊逐場事實表（併入 InitRankingCache 的建表職責）
+    /// </summary>
+    private static void CreateRankingCacheTables(SqliteConnection conn)
+    {
+        var ddl = @"
+            -- tblBattingRankingCache
+            CREATE TABLE IF NOT EXISTS tblBattingRankingCache (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                seasonId TEXT NOT NULL,
+                playerId TEXT NOT NULL,
+                playerName TEXT NOT NULL,
+                rank INTEGER NOT NULL,
+                games INTEGER NOT NULL,
+                pa INTEGER NOT NULL,
+                ab INTEGER NOT NULL,
+                h INTEGER NOT NULL,
+                twoB INTEGER NOT NULL,
+                threeB INTEGER NOT NULL,
+                hr INTEGER NOT NULL,
+                rbi INTEGER NOT NULL,
+                r INTEGER NOT NULL,
+                so INTEGER NOT NULL,
+                bb INTEGER NOT NULL,
+                hbp INTEGER NOT NULL,
+                sf INTEGER NOT NULL,
+                sb INTEGER NOT NULL,
+                avg REAL NOT NULL,
+                obp REAL NOT NULL,
+                slg REAL NOT NULL,
+                ops REAL NOT NULL,
+                updatedAt TEXT NOT NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_BattingRankingCache_SeasonId_PlayerId 
+            ON tblBattingRankingCache(seasonId, playerId);
+            CREATE INDEX IF NOT EXISTS IX_BattingRankingCache_SeasonId_Rank 
+            ON tblBattingRankingCache(seasonId, rank);
+
+            -- tblPitchingRankingCache
+            CREATE TABLE IF NOT EXISTS tblPitchingRankingCache (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                seasonId TEXT NOT NULL,
+                playerId TEXT NOT NULL,
+                playerName TEXT NOT NULL,
+                rank INTEGER NOT NULL,
+                games INTEGER NOT NULL,
+                ip REAL NOT NULL,
+                ipOuts INTEGER NOT NULL,
+                h INTEGER NOT NULL,
+                hr INTEGER NOT NULL,
+                bb INTEGER NOT NULL,
+                so INTEGER NOT NULL,
+                r INTEGER NOT NULL,
+                er INTEGER NOT NULL,
+                w INTEGER NOT NULL,
+                l INTEGER NOT NULL,
+                era REAL NOT NULL,
+                whip REAL NOT NULL,
+                updatedAt TEXT NOT NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_PitchingRankingCache_SeasonId_PlayerId 
+            ON tblPitchingRankingCache(seasonId, playerId);
+            CREATE INDEX IF NOT EXISTS IX_PitchingRankingCache_SeasonId_Rank 
+            ON tblPitchingRankingCache(seasonId, rank);
+
+            -- tblTeamGameStats（團隊逐場事實表）
+            CREATE TABLE IF NOT EXISTS tblTeamGameStats (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                seasonId TEXT NOT NULL,
+                gameId TEXT NOT NULL,
+                gameDate TEXT NOT NULL,
+                teamId TEXT NOT NULL,
+                teamName TEXT NOT NULL,
+                opponentTeamId TEXT NOT NULL,
+                opponentTeamName TEXT NOT NULL,
+                isHome INTEGER NOT NULL,
+                teamScore INTEGER NOT NULL,
+                opponentScore INTEGER NOT NULL,
+                pa INTEGER NOT NULL,
+                ab INTEGER NOT NULL,
+                h INTEGER NOT NULL,
+                twoB INTEGER NOT NULL,
+                threeB INTEGER NOT NULL,
+                hr INTEGER NOT NULL,
+                bb INTEGER NOT NULL,
+                so INTEGER NOT NULL,
+                hbp INTEGER NOT NULL,
+                sf INTEGER NOT NULL,
+                sb INTEGER NOT NULL,
+                cs INTEGER NOT NULL,
+                ipOuts INTEGER NOT NULL,
+                er INTEGER NOT NULL,
+                hitsAllowed INTEGER NOT NULL,
+                bbAllowed INTEGER NOT NULL,
+                soPitching INTEGER NOT NULL,
+                hrAllowed INTEGER NOT NULL,
+                createdAt TEXT NOT NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_TeamGameStats_GameId_TeamId
+            ON tblTeamGameStats(gameId, teamId);
+            CREATE INDEX IF NOT EXISTS IX_TeamGameStats_Season_Team_Date
+            ON tblTeamGameStats(seasonId, teamId, gameDate);
+
+            -- tblTeamSeasonRankingCache（球隊賽季匯總/排行榜快取）
+            CREATE TABLE IF NOT EXISTS tblTeamSeasonRankingCache (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                seasonId TEXT NOT NULL,
+                teamId TEXT NOT NULL,
+                teamName TEXT NOT NULL,
+                rank INTEGER NOT NULL,
+                gamesPlayed INTEGER NOT NULL,
+                wins INTEGER NOT NULL,
+                losses INTEGER NOT NULL,
+                runsScored INTEGER NOT NULL,
+                runsAllowed INTEGER NOT NULL,
+                pa INTEGER NOT NULL,
+                ab INTEGER NOT NULL,
+                h INTEGER NOT NULL,
+                twoB INTEGER NOT NULL,
+                threeB INTEGER NOT NULL,
+                hr INTEGER NOT NULL,
+                bb INTEGER NOT NULL,
+                so INTEGER NOT NULL,
+                hbp INTEGER NOT NULL,
+                sf INTEGER NOT NULL,
+                sb INTEGER NOT NULL,
+                cs INTEGER NOT NULL,
+                ipOuts INTEGER NOT NULL,
+                er INTEGER NOT NULL,
+                hitsAllowed INTEGER NOT NULL,
+                bbAllowed INTEGER NOT NULL,
+                soPitching INTEGER NOT NULL,
+                hrAllowed INTEGER NOT NULL,
+                winPct REAL NOT NULL,
+                avg REAL NOT NULL,
+                obp REAL NOT NULL,
+                slg REAL NOT NULL,
+                ops REAL NOT NULL,
+                era REAL NOT NULL,
+                fip REAL,
+                runDiff INTEGER NOT NULL,
+                updatedAt TEXT NOT NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS IX_TeamSeasonRanking_SeasonId_TeamId
+            ON tblTeamSeasonRankingCache(seasonId, teamId);
+            CREATE INDEX IF NOT EXISTS IX_TeamSeasonRanking_SeasonId_Rank
+            ON tblTeamSeasonRankingCache(seasonId, rank);
+        ";
+
+        using (var cmd = conn.CreateCommand()) { cmd.CommandText = ddl; cmd.ExecuteNonQuery(); }
+        Console.WriteLine("[OK] Ranking cache & team game stats tables created.");
     }
 
     /// <summary>
@@ -621,6 +777,250 @@ class Program
 
         // 插入 Code Tables
         InsertCodeTables(conn);
+
+        // 依逐場資料聚合，寫入團隊逐場事實表
+        InsertTblTeamGameStats(conn, doc);
+
+        // 依逐場事實表重建球隊賽季匯總快取
+        RebuildTeamSeasonRankingCache(conn);
+    }
+
+    /// <summary>
+    /// 由 JSON 逐場資料聚合並寫入 tblTeamGameStats
+    /// </summary>
+    private static void InsertTblTeamGameStats(SqliteConnection conn, JsonDocument doc)
+    {
+        foreach (var game in GetGames(doc))
+        {
+            var seasonId = GetString(game, "seasonId") ?? "";
+            var seq = GetInt(game, "seq");
+            var gameDateStr = GetString(game, "date") ?? "";
+            var gameDate = DateTime.TryParse(gameDateStr, out var dt) ? dt.ToString("yyyy-MM-dd") : gameDateStr;
+
+            var homeTeamId = GetString(game, "homeTeamId") ?? "";
+            var homeTeam = GetString(game, "homeTeam") ?? "";
+            var awayTeamId = GetString(game, "awayTeamId") ?? "";
+            var awayTeam = GetString(game, "awayTeam") ?? "";
+
+            var homeScoresTotal = 0;
+            var awayScoresTotal = 0;
+            if (game.TryGetProperty("homeScores", out var hScores))
+                homeScoresTotal = ParseScoreArray(hScores).Sum();
+            if (game.TryGetProperty("awayScores", out var aScores))
+                awayScoresTotal = ParseScoreArray(aScores).Sum();
+
+            // 聚合打擊箱資料
+            var homeBatAgg = AggregateBatterBox(game, "homeBatterBox");
+            var awayBatAgg = AggregateBatterBox(game, "awayBatterBox");
+
+            // 聚合投手箱資料
+            var homePitAgg = AggregatePitcherBox(game, "homePitcherBox");
+            var awayPitAgg = AggregatePitcherBox(game, "awayPitcherBox");
+
+            // 組裝並寫入主隊逐場紀錄
+            InsertOneTeamGameRow(conn, seasonId, seq, gameDate, homeTeamId, homeTeam, awayTeamId, awayTeam,
+                isHome: 1,
+                teamScore: homeScoresTotal,
+                opponentScore: awayScoresTotal,
+                bat: homeBatAgg,
+                pit: homePitAgg);
+
+            // 組裝並寫入客隊逐場紀錄
+            InsertOneTeamGameRow(conn, seasonId, seq, gameDate, awayTeamId, awayTeam, homeTeamId, homeTeam,
+                isHome: 0,
+                teamScore: awayScoresTotal,
+                opponentScore: homeScoresTotal,
+                bat: awayBatAgg,
+                pit: awayPitAgg);
+        }
+    }
+
+    private class BatAgg { public int pa, ab, h, twoB, threeB, hr, bb, so, hbp, sf, sb, cs; }
+    private class PitAgg { public int ipOuts, er, hitsAllowed, bbAllowed, soPitching, hrAllowed; }
+
+    private static BatAgg AggregateBatterBox(JsonElement game, string boxName)
+    {
+        var agg = new BatAgg();
+        if (!game.TryGetProperty(boxName, out var boxEl) || boxEl.ValueKind != JsonValueKind.Array) return agg;
+        foreach (var bat in boxEl.EnumerateArray())
+        {
+            agg.pa += GetInt(bat, "PA");
+            agg.ab += GetInt(bat, "AB");
+            agg.h += GetInt(bat, "H");
+            agg.twoB += GetInt(bat, "2B");
+            agg.threeB += GetInt(bat, "3B");
+            agg.hr += GetInt(bat, "HR");
+            agg.bb += GetInt(bat, "BB");
+            agg.so += GetInt(bat, "SO");
+            agg.hbp += GetInt(bat, "HBP");
+            agg.sf += GetInt(bat, "SF");
+            agg.sb += GetInt(bat, "SB");
+            agg.cs += GetInt(bat, "CS");
+        }
+        return agg;
+    }
+
+    private static PitAgg AggregatePitcherBox(JsonElement game, string boxName)
+    {
+        var agg = new PitAgg();
+        if (!game.TryGetProperty(boxName, out var boxEl) || boxEl.ValueKind != JsonValueKind.Array) return agg;
+        foreach (var pit in boxEl.EnumerateArray())
+        {
+            agg.ipOuts += GetInt(pit, "IPOuts");
+            agg.er += GetInt(pit, "ER");
+            agg.hitsAllowed += GetInt(pit, "H");
+            agg.bbAllowed += GetInt(pit, "BB");
+            agg.soPitching += GetInt(pit, "SO");
+            agg.hrAllowed += GetInt(pit, "HR");
+        }
+        return agg;
+    }
+
+    private static void InsertOneTeamGameRow(SqliteConnection conn,
+        string seasonId, int seq, string gameDate,
+        string teamId, string teamName,
+        string opponentTeamId, string opponentTeamName,
+        int isHome, int teamScore, int opponentScore,
+        BatAgg bat, PitAgg pit)
+    {
+        var gameId = $"{seasonId}-{seq}";
+        var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            INSERT OR IGNORE INTO tblTeamGameStats(
+                seasonId, gameId, gameDate,
+                teamId, teamName, opponentTeamId, opponentTeamName,
+                isHome, teamScore, opponentScore,
+                pa, ab, h, twoB, threeB, hr, bb, so, hbp, sf, sb, cs,
+                ipOuts, er, hitsAllowed, bbAllowed, soPitching, hrAllowed,
+                createdAt
+            ) VALUES (
+                @sid, @gid, @gdate,
+                @tid, @tname, @otid, @otname,
+                @isHome, @ts, @os,
+                @pa, @ab, @h, @twoB, @threeB, @hr, @bb, @so, @hbp, @sf, @sb, @cs,
+                @ipOuts, @er, @hitsAllowed, @bbAllowed, @soPitching, @hrAllowed,
+                @createdAt
+            );";
+
+        cmd.Parameters.AddWithValue("@sid", seasonId);
+        cmd.Parameters.AddWithValue("@gid", gameId);
+        cmd.Parameters.AddWithValue("@gdate", gameDate);
+        cmd.Parameters.AddWithValue("@tid", teamId);
+        cmd.Parameters.AddWithValue("@tname", teamName);
+        cmd.Parameters.AddWithValue("@otid", opponentTeamId);
+        cmd.Parameters.AddWithValue("@otname", opponentTeamName);
+        cmd.Parameters.AddWithValue("@isHome", isHome);
+        cmd.Parameters.AddWithValue("@ts", teamScore);
+        cmd.Parameters.AddWithValue("@os", opponentScore);
+        cmd.Parameters.AddWithValue("@pa", bat.pa);
+        cmd.Parameters.AddWithValue("@ab", bat.ab);
+        cmd.Parameters.AddWithValue("@h", bat.h);
+        cmd.Parameters.AddWithValue("@twoB", bat.twoB);
+        cmd.Parameters.AddWithValue("@threeB", bat.threeB);
+        cmd.Parameters.AddWithValue("@hr", bat.hr);
+        cmd.Parameters.AddWithValue("@bb", bat.bb);
+        cmd.Parameters.AddWithValue("@so", bat.so);
+        cmd.Parameters.AddWithValue("@hbp", bat.hbp);
+        cmd.Parameters.AddWithValue("@sf", bat.sf);
+        cmd.Parameters.AddWithValue("@sb", bat.sb);
+        cmd.Parameters.AddWithValue("@cs", bat.cs);
+        cmd.Parameters.AddWithValue("@ipOuts", pit.ipOuts);
+        cmd.Parameters.AddWithValue("@er", pit.er);
+        cmd.Parameters.AddWithValue("@hitsAllowed", pit.hitsAllowed);
+        cmd.Parameters.AddWithValue("@bbAllowed", pit.bbAllowed);
+        cmd.Parameters.AddWithValue("@soPitching", pit.soPitching);
+        cmd.Parameters.AddWithValue("@hrAllowed", pit.hrAllowed);
+        cmd.Parameters.AddWithValue("@createdAt", DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"));
+
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// 從 tblTeamGameStats 聚合重建 tblTeamSeasonRankingCache（全季粒度）
+    /// </summary>
+    private static void RebuildTeamSeasonRankingCache(SqliteConnection conn)
+    {
+        // 以 seasonId, teamId 聚合逐場資料
+        // 註：勝敗計算以 teamScore vs opponentScore 判斷
+        var ddl = @"
+            -- 先清掉舊資料（可依需求改為僅更新特定季）
+            DELETE FROM tblTeamSeasonRankingCache;
+
+            INSERT INTO tblTeamSeasonRankingCache(
+                seasonId, teamId, teamName,
+                rank, gamesPlayed, wins, losses,
+                runsScored, runsAllowed,
+                pa, ab, h, twoB, threeB, hr, bb, so, hbp, sf, sb, cs,
+                ipOuts, er, hitsAllowed, bbAllowed, soPitching, hrAllowed,
+                winPct, avg, obp, slg, ops, era, fip, runDiff, updatedAt
+            )
+            SELECT
+                tgs.seasonId,
+                tgs.teamId,
+                MAX(tgs.teamName) as teamName,
+                0 as rank, -- 之後可依勝率/得失分差計算排行再更新
+                COUNT(*) as gamesPlayed,
+                SUM(CASE WHEN tgs.teamScore > tgs.opponentScore THEN 1 ELSE 0 END) as wins,
+                SUM(CASE WHEN tgs.teamScore < tgs.opponentScore THEN 1 ELSE 0 END) as losses,
+                SUM(tgs.teamScore) as runsScored,
+                SUM(tgs.opponentScore) as runsAllowed,
+                SUM(tgs.pa) as pa,
+                SUM(tgs.ab) as ab,
+                SUM(tgs.h) as h,
+                SUM(tgs.twoB) as twoB,
+                SUM(tgs.threeB) as threeB,
+                SUM(tgs.hr) as hr,
+                SUM(tgs.bb) as bb,
+                SUM(tgs.so) as so,
+                SUM(tgs.hbp) as hbp,
+                SUM(tgs.sf) as sf,
+                SUM(tgs.sb) as sb,
+                SUM(tgs.cs) as cs,
+                SUM(tgs.ipOuts) as ipOuts,
+                SUM(tgs.er) as er,
+                SUM(tgs.hitsAllowed) as hitsAllowed,
+                SUM(tgs.bbAllowed) as bbAllowed,
+                SUM(tgs.soPitching) as soPitching,
+                SUM(tgs.hrAllowed) as hrAllowed,
+                -- 派生指標（避免除以零）
+                CASE WHEN COUNT(*) > 0 THEN CAST(SUM(CASE WHEN tgs.teamScore > tgs.opponentScore THEN 1 ELSE 0 END) AS REAL) / COUNT(*) ELSE 0 END as winPct,
+                CASE WHEN SUM(tgs.ab) > 0 THEN CAST(SUM(tgs.h) AS REAL) / SUM(tgs.ab) ELSE 0 END as avg,
+                -- OBP = (H + BB + HBP) / (AB + BB + HBP + SF)
+                CASE WHEN (SUM(tgs.ab) + SUM(tgs.bb) + SUM(tgs.hbp) + SUM(tgs.sf)) > 0
+                     THEN CAST((SUM(tgs.h) + SUM(tgs.bb) + SUM(tgs.hbp)) AS REAL) / (SUM(tgs.ab) + SUM(tgs.bb) + SUM(tgs.hbp) + SUM(tgs.sf))
+                     ELSE 0 END as obp,
+                -- SLG = TotalBases / AB；TotalBases = 1B + 2*2B + 3*3B + 4*HR；1B = H - (2B+3B+HR)
+                CASE WHEN SUM(tgs.ab) > 0
+                     THEN CAST((SUM(tgs.h) - (SUM(tgs.twoB)+SUM(tgs.threeB)+SUM(tgs.hr)) + 2*SUM(tgs.twoB) + 3*SUM(tgs.threeB) + 4*SUM(tgs.hr)) AS REAL) / SUM(tgs.ab)
+                     ELSE 0 END as slg,
+                0 as ops, -- 先置 0，稍後用 UPDATE 計算 obp+slg
+                -- ERA = 9 * ER / IP；IP = ipOuts / 3.0
+                CASE WHEN SUM(tgs.ipOuts) > 0 THEN 9.0 * CAST(SUM(tgs.er) AS REAL) / (CAST(SUM(tgs.ipOuts) AS REAL) / 3.0) ELSE 0 END as era,
+                NULL as fip,
+                SUM(tgs.teamScore) - SUM(tgs.opponentScore) as runDiff,
+                strftime('%Y-%m-%dT%H:%M:%SZ','now') as updatedAt
+            FROM tblTeamGameStats tgs
+            GROUP BY tgs.seasonId, tgs.teamId;
+
+            -- 更新 OPS = OBP + SLG
+            UPDATE tblTeamSeasonRankingCache
+            SET ops = obp + slg;
+
+            -- 依勝率排序計算 rank（同季內）
+            WITH ranked AS (
+                SELECT seasonId, teamId,
+                       ROW_NUMBER() OVER (PARTITION BY seasonId ORDER BY winPct DESC, runDiff DESC) AS rnk
+                FROM tblTeamSeasonRankingCache
+            )
+            UPDATE tblTeamSeasonRankingCache AS t
+            SET rank = (SELECT rnk FROM ranked WHERE ranked.seasonId = t.seasonId AND ranked.teamId = t.teamId);
+        ";
+
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = ddl;
+        cmd.ExecuteNonQuery();
+
+        Console.WriteLine("[OK] Rebuilt tblTeamSeasonRankingCache from tblTeamGameStats.");
     }
 
     /// <summary>

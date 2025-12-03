@@ -18,13 +18,25 @@
 - 包含排名、統計數據（IP, H, HR, BB, SO, ERA, WHIP 等）
 - 索引：(seasonId, playerId) 唯一索引、(seasonId, rank) 索引
 
+#### tblTeamGameStats (球隊場次統計)
+- 儲存每場比賽的球隊統計數據
+- 包含打擊數據（PA, AB, H, 2B, 3B, HR, BB, SO, HBP, SF, SB, CS）
+- 包含投球數據（ipOuts, ER, hitsAllowed, bbAllowed, soPitching, hrAllowed）
+- 索引：(seasonId, teamId, gameDate) 唯一索引
+
+#### tblTeamSeasonRankingCache (球隊賽季排行榜快取)
+- 儲存預先計算好的球隊賽季統計數據
+- 包含排名、戰績（勝敗、勝率）、進攻數據（AVG, OBP, SLG, OPS）、投球數據（ERA, FIP）
+- 索引：(seasonId, teamId) 唯一索引、(seasonId, rank) 索引
+
 ### 2. 核心服務
 
 #### RankingCacheService
 提供以下功能：
 - `UpdateBattingRankingsAsync(seasonId)` - 更新指定賽季的打者排行榜快取
 - `UpdatePitchingRankingsAsync(seasonId)` - 更新指定賽季的投手排行榜快取
-- `UpdateAllRankingsAsync()` - 更新所有賽季的排行榜快取
+- `UpdateTeamRankingsAsync(seasonId)` - 更新指定賽季（或所有賽季）的球隊排行榜快取
+- `UpdateAllRankingsAsync()` - 更新所有賽季的排行榜快取（包含打者、投手、球隊）
 - `GetBattingRankingsFromCacheAsync(seasonId, minQualifiedPA)` - 從快取讀取打者排行榜
 - `GetPitchingRankingsFromCacheAsync(seasonId, minQualifiedIP)` - 從快取讀取投手排行榜
 - `IsCacheStaleAsync(seasonId, hoursThreshold)` - 檢查快取是否過期
@@ -42,7 +54,9 @@
 提供手動觸發快取更新的 API：
 - `POST /api/rankingcache/batting/{seasonId}` - 更新指定賽季的打者排行榜
 - `POST /api/rankingcache/pitching/{seasonId}` - 更新指定賽季的投手排行榜
-- `POST /api/rankingcache/all` - 更新所有賽季的排行榜
+- `POST /api/rankingcache/team/{seasonId}` - 更新指定賽季的球隊排行榜
+- `POST /api/rankingcache/team?seasonId={seasonId}` - 更新球隊排行榜（可選參數，不提供則更新所有賽季）
+- `POST /api/rankingcache/all` - 更新所有賽季的排行榜（包含打者、投手、球隊）
 - `GET /api/rankingcache/status/{seasonId}` - 檢查快取狀態
 
 ## 使用方式
@@ -75,8 +89,8 @@
 資料表已經透過初始化工具建立完成。如果需要重新建立，可以執行：
 
 ```powershell
-cd c:\Users\kwlin\Desktop\ideas\BaseballApp\tools\InitRankingCache
-dotnet run
+cd c:\Users\kwlin\Desktop\ideas\BaseballApp\tools\DataEtl
+ dotnet run -- --db c:\Users\kwlin\Desktop\ideas\BaseballApp\data\baseball.db
 ```
 
 啟動應用程式後，可以透過 API 手動觸發首次快取建立：
@@ -94,6 +108,12 @@ Invoke-RestMethod -Uri "http://localhost:5000/api/rankingcache/batting/CPBL-2024
 
 # 更新 2024 賽季投手排行榜
 Invoke-RestMethod -Uri "http://localhost:5000/api/rankingcache/pitching/CPBL-2024-HE" -Method POST
+
+# 更新 2024 賽季球隊排行榜
+Invoke-RestMethod -Uri "http://localhost:5000/api/rankingcache/team/CPBL-2024-HE" -Method POST
+
+# 更新所有賽季的球隊排行榜
+Invoke-RestMethod -Uri "http://localhost:5000/api/rankingcache/team" -Method POST
 ```
 
 ## 效能優勢

@@ -3,18 +3,28 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BaseballApp.Models;
 
-public class PlayerDetailViewModel
-{
+public class PlayerDetailViewModel{
     public string SeasonId { get; set; } = "ALL";
-    public Batter Player { get; set; } = new Batter();
-    public Stats Stats { get; set; } = new Stats();
+    public BatterDetailModel? BatterDetail { get; set; } = null;
+    public PitcherDetailModel? PitcherDetail { get; set; } = null;
     public List<SelectListItem> SeriesList { get; set; } = [];
+}
+public class BatterDetailModel
+{
+    public Batter Batter { get; set; } = new Batter();
+    public BatterStats Stats { get; set; } = new BatterStats();
+}
+
+public class PitcherDetailModel
+{
+    public Pitcher Pitcher { get; set; } = new Pitcher();
+    public PitcherStats Stats { get; set; } = new PitcherStats();
 }
 
 /// <summary>
-/// 球員數據統計
+/// 球員打擊數據統計
 /// </summary>
-public class Stats
+public class BatterStats
 {
     /// <summary>
     /// 出賽數
@@ -188,28 +198,18 @@ public class Stats
     /// <summary>
     /// 比賽數據列表
     /// </summary>
-    public List<GameStat> GameStats { get; set; } = [];
+    public List<BatterGameStat> GameStats { get; set; } = [];
 
     /// <summary>
     /// 最佳打席列表(依 WPA 排序)
     /// </summary>
     public List<BestPA> BestPAs { get; set; } = [];
-
-    /// <summary>
-    /// 各項指標百分位排名 (PR值: 0-100)
-    /// </summary>
-    public Dictionary<string, decimal> PercentileRanks { get; set; } = [];
-
-    /// <summary>
-    /// 賽季各項指標平均值
-    /// </summary>
-    public Dictionary<string, decimal> SeasonAverages { get; set; } = [];
 }
 
 /// <summary>
-/// 比賽數據
+/// 打擊數據統計
 /// </summary>
-public class GameStat
+public class BatterGameStat
 {
     /// <summary>
     /// 比賽日期
@@ -435,4 +435,434 @@ public class BestPA
     /// 勝率貢獻值
     /// </summary>
     public decimal? WPA { get; set; }
+}
+
+/// <summary>
+/// 投手數據統計
+/// </summary>
+public class PitcherStats
+{
+    /// <summary>
+    /// 出賽數
+    /// </summary>
+    public int Games
+    {
+        get
+        {
+            return GameStats.Count;
+        }
+    }
+
+    /// <summary>
+    /// 總投球局數（出局數 / 3）
+    /// </summary>
+    public decimal TotalIP
+    {
+        get
+        {
+            int totalOuts = GameStats.Sum(gs => gs.IPOuts);
+            return (decimal)(totalOuts / 3) + (decimal)(totalOuts % 3) / 10m;
+        }
+    }
+
+    /// <summary>
+    /// 總投球出局數
+    /// </summary>
+    public int TotalIPOuts
+    {
+        get
+        {
+            return GameStats.Sum(gs => gs.IPOuts);
+        }
+    }
+
+    /// <summary>
+    /// 面對打席數
+    /// </summary>
+    public int TotalBF
+    {
+        get
+        {
+            return GameStats.Sum(gs => gs.BF);
+        }
+    }
+
+    /// <summary>
+    /// 被安打數
+    /// </summary>
+    public int HitsAllowed
+    {
+        get
+        {
+            return GameStats.Sum(gs => gs.H);
+        }
+    }
+
+    /// <summary>
+    /// 被全壘打數
+    /// </summary>
+    public int HomeRunsAllowed
+    {
+        get
+        {
+            return GameStats.Sum(gs => gs.HR);
+        }
+    }
+
+    /// <summary>
+    /// 四壞球數
+    /// </summary>
+    public int Walks
+    {
+        get
+        {
+            return GameStats.Sum(gs => gs.BB);
+        }
+    }
+
+    /// <summary>
+    /// 故意四壞
+    /// </summary>
+    public int IntentionalWalks
+    {
+        get
+        {
+            return GameStats.Sum(gs => gs.IBB);
+        }
+    }
+
+    /// <summary>
+    /// 觸身球數
+    /// </summary>
+    public int HitBatters
+    {
+        get
+        {
+            return GameStats.Sum(gs => gs.HBP);
+        }
+    }
+
+    /// <summary>
+    /// 三振數
+    /// </summary>
+    public int Strikeouts
+    {
+        get
+        {
+            return GameStats.Sum(gs => gs.SO);
+        }
+    }
+
+    /// <summary>
+    /// 失分數
+    /// </summary>
+    public int RunsAllowed
+    {
+        get
+        {
+            return GameStats.Sum(gs => gs.R);
+        }
+    }
+
+    /// <summary>
+    /// 自責分數
+    /// </summary>
+    public int EarnedRuns
+    {
+        get
+        {
+            return GameStats.Sum(gs => gs.ER);
+        }
+    }
+
+    /// <summary>
+    /// 用球數
+    /// </summary>
+    public int TotalPitches
+    {
+        get
+        {
+            return GameStats.Sum(gs => gs.NP);
+        }
+    }
+
+    /// <summary>
+    /// 防禦率 (ERA)
+    /// </summary>
+    public decimal ERA
+    {
+        get
+        {
+            if (TotalIPOuts == 0) return 0;
+            return Math.Round((decimal)EarnedRuns * 27 / TotalIPOuts, 2);
+        }
+    }
+
+    /// <summary>
+    /// 每局被上壘率 (WHIP)
+    /// </summary>
+    public decimal WHIP
+    {
+        get
+        {
+            if (TotalIPOuts == 0) return 0;
+            return Math.Round((decimal)(HitsAllowed + Walks) * 3 / TotalIPOuts, 2);
+        }
+    }
+
+    /// <summary>
+    /// 每九局三振率 (K/9)
+    /// </summary>
+    public decimal K9
+    {
+        get
+        {
+            if (TotalIPOuts == 0) return 0;
+            return Math.Round((decimal)Strikeouts * 27 / TotalIPOuts, 2);
+        }
+    }
+
+    /// <summary>
+    /// 每九局保送率 (BB/9)
+    /// </summary>
+    public decimal BB9
+    {
+        get
+        {
+            if (TotalIPOuts == 0) return 0;
+            return Math.Round((decimal)Walks * 27 / TotalIPOuts, 2);
+        }
+    }
+
+    /// <summary>
+    /// 三振保送比 (K/BB)
+    /// </summary>
+    public decimal KBBRatio
+    {
+        get
+        {
+            if (Walks == 0) return Strikeouts;
+            return Math.Round((decimal)Strikeouts / Walks, 2);
+        }
+    }
+
+    /// <summary>
+    /// 平均每場投球局數
+    /// </summary>
+    public decimal AverageIPPerGame
+    {
+        get
+        {
+            if (Games == 0) return 0;
+            return Math.Round(TotalIP / Games, 2);
+        }
+    }
+
+    /// <summary>
+    /// 平均每場用球數
+    /// </summary>
+    public decimal AveragePitchesPerGame
+    {
+        get
+        {
+            if (Games == 0) return 0;
+            return Math.Round((decimal)TotalPitches / Games, 1);
+        }
+    }
+
+    /// <summary>
+    /// 被打擊率 (對手打擊率)
+    /// </summary>
+    public decimal OpponentBAA
+    {
+        get
+        {
+            // AB = BF - BB - HBP - SF (簡化計算，假設SF很少)
+            int opponentAB = TotalBF - Walks - HitBatters;
+            if (opponentAB <= 0) return 0;
+            return Math.Round((decimal)HitsAllowed / opponentAB, 3);
+        }
+    }
+
+    /// <summary>
+    /// 比賽數據列表
+    /// </summary>
+    public List<PitcherGameStat> GameStats { get; set; } = [];
+
+    /// <summary>
+    /// 最佳投球表現列表
+    /// </summary>
+    public List<BestPitchingPerformance> BestPerformances { get; set; } = [];
+}
+
+/// <summary>
+/// 投手單場比賽數據
+/// </summary>
+public class PitcherGameStat
+{
+    /// <summary>
+    /// 比賽日期
+    /// </summary>
+    public DateTime Date { get; set; }
+
+    /// <summary>
+    /// 賽季名稱
+    /// </summary>
+    public string SeasonName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 比賽序號
+    /// </summary>
+    public int Seq { get; set; }
+
+    /// <summary>
+    /// 投球局數（出局數）
+    /// </summary>
+    public int IPOuts { get; set; }
+
+    /// <summary>
+    /// 投球局數（格式化：例如 6.1 = 6又1/3局）
+    /// </summary>
+    public decimal IP
+    {
+        get
+        {
+            return (decimal)(IPOuts / 3) + (decimal)(IPOuts % 3) / 10m;
+        }
+    }
+
+    /// <summary>
+    /// 用球數
+    /// </summary>
+    public int NP { get; set; }
+
+    /// <summary>
+    /// 面對打席數
+    /// </summary>
+    public int BF { get; set; }
+
+    /// <summary>
+    /// 被安打數
+    /// </summary>
+    public int H { get; set; }
+
+    /// <summary>
+    /// 被全壘打數
+    /// </summary>
+    public int HR { get; set; }
+
+    /// <summary>
+    /// 四壞球數
+    /// </summary>
+    public int BB { get; set; }
+
+    /// <summary>
+    /// 故意四壞
+    /// </summary>
+    public int IBB { get; set; }
+
+    /// <summary>
+    /// 觸身球數
+    /// </summary>
+    public int HBP { get; set; }
+
+    /// <summary>
+    /// 三振數
+    /// </summary>
+    public int SO { get; set; }
+
+    /// <summary>
+    /// 失分數
+    /// </summary>
+    public int R { get; set; }
+
+    /// <summary>
+    /// 自責分數
+    /// </summary>
+    public int ER { get; set; }
+
+    /// <summary>
+    /// 防禦率
+    /// </summary>
+    public decimal ERA
+    {
+        get
+        {
+            if (IPOuts == 0) return 0;
+            return Math.Round((decimal)ER * 27 / IPOuts, 2);
+        }
+    }
+
+    /// <summary>
+    /// WHIP
+    /// </summary>
+    public decimal WHIP
+    {
+        get
+        {
+            if (IPOuts == 0) return 0;
+            return Math.Round((decimal)(H + BB) * 3 / IPOuts, 2);
+        }
+    }
+
+    /// <summary>
+    /// 對手
+    /// </summary>
+    public required string Opponent { get; set; }
+
+    /// <summary>
+    /// 是否主場
+    /// </summary>
+    public bool IsHome { get; set; }
+
+    /// <summary>
+    /// 是否先發
+    /// </summary>
+    public bool IsStarter { get; set; }
+}
+
+/// <summary>
+/// 最佳投球表現
+/// </summary>
+public class BestPitchingPerformance
+{
+    /// <summary>
+    /// 比賽日期
+    /// </summary>
+    public DateTime Date { get; set; }
+
+    /// <summary>
+    /// 賽季名稱
+    /// </summary>
+    public string SeasonName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 比賽序號
+    /// </summary>
+    public int Seq { get; set; }
+
+    /// <summary>
+    /// 投球局數
+    /// </summary>
+    public decimal IP { get; set; }
+
+    /// <summary>
+    /// 三振數
+    /// </summary>
+    public int SO { get; set; }
+
+    /// <summary>
+    /// 防禦率
+    /// </summary>
+    public decimal ERA { get; set; }
+
+    /// <summary>
+    /// 對手
+    /// </summary>
+    public string Opponent { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 評分指標（用於排序）
+    /// </summary>
+    public decimal Score { get; set; }
 }

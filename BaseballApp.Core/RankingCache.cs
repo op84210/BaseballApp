@@ -222,6 +222,26 @@ public class PitchingRankingCache
     public decimal WHIP { get; set; }
 
     /// <summary>
+    /// 每九局三振率
+    /// </summary>
+    public decimal K9 { get; set; }
+
+    /// <summary>
+    /// 每九局保送率
+    /// </summary>
+    public decimal BB9 { get; set; }
+
+    /// <summary>
+    /// 三振保送比
+    /// </summary>
+    public decimal KBBRatio { get; set; }
+
+    /// <summary>
+    /// 被打擊率
+    /// </summary>
+    public decimal BAA { get; set; }
+
+    /// <summary>
     /// 更新時間
     /// </summary>
     public DateTime UpdatedAt { get; set; }

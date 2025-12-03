@@ -1,11 +1,11 @@
 @model BaseballApp.Models.PlayerDetailViewModel
 @{
-    ViewData["Title"] = "球員詳情";
+    ViewData[index: "Title"] = "球員詳情";
 }
 
 <div class="container mt-4">
     <div class="mb-3">
-        <a href="@Url.Action("Players", new { seasonId = Model.SeasonId })" class="btn btn-secondary">← 返回球員列表</a>
+        <a href="@Url.Action(action: "Players", new { seasonId = Model.SeasonId })" class="btn btn-secondary">← 返回球員列表</a>
     </div>
 
     <!-- 球員基本資訊 -->
@@ -13,13 +13,33 @@
         <div class="card-body">
             <div class="col-md-4">
                 <h2>
-                    @if (!string.IsNullOrEmpty(@Model.Player.PlayerNumber))
+                    @if (Model.BatterDetail?.Batter != null)
                     {
-                        <span class="badge bg-secondary">@Model.Player.PlayerNumber</span>
+                        @if (!string.IsNullOrEmpty(Model.BatterDetail.Batter.PlayerNumber))
+                        {
+                            <span class="badge bg-secondary">@Model.BatterDetail.Batter.PlayerNumber</span>
+                        }
+                        @Model.BatterDetail.Batter.PlayerName
                     }
-                    @Model.Player.PlayerName
+                    else if (Model.PitcherDetail?.Pitcher != null)
+                    {
+                        @if (!string.IsNullOrEmpty(Model.PitcherDetail.Pitcher.PlayerNumber))
+                        {
+                            <span class="badge bg-secondary">@Model.PitcherDetail.Pitcher.PlayerNumber</span>
+                        }
+                        @Model.PitcherDetail.Pitcher.PlayerName
+                    }
                 </h2>
-                <p class="text-muted">球員編號: @Model.Player.PlayerId</p>
+                <p class="text-muted">球員編號: 
+                    @if (Model.BatterDetail?.Batter != null)
+                    {
+                        @Model.BatterDetail.Batter.PlayerId
+                    }
+                    else if (Model.PitcherDetail?.Pitcher != null)
+                    {
+                        @Model.PitcherDetail.Pitcher.PlayerId
+                    }
+                </p>
             </div>
             <div class="col-md-8 text-md-end mt-3 mt-md-0">
                 <select id="seriesSelect" class="form-select w-auto">
@@ -42,113 +62,241 @@
         </div>
     </div>
 
-    <!-- 統計數據 -->
-    <div class="row mb-4">
-        <div class="col-md-3 col-sm-6 mb-3">
-            <div class="card text-center">
-                <div class="card-body">
-                    <h3 class="card-title">@Model.Stats.Games</h3>
-                    <p class="card-text text-muted">出賽數</p>
+    <hr class="my-4" />
+
+    <!-- 打擊統計數據 -->
+    @if (Model.BatterDetail?.Stats != null)
+    {
+        <div class="row mb-4">
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h3 class="card-title">@Model.BatterDetail.Stats.Games</h3>
+                        <p class="card-text text-muted">出賽數</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h3 class="card-title">@Model.BatterDetail.Stats.TotalPAs</h3>
+                        <p class="card-text text-muted">總打席數</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h3 class="card-title">@Model.BatterDetail.Stats.AveragePAsPerGame</h3>
+                        <p class="card-text text-muted">平均每場打席數</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h3 class="card-title">@Model.BatterDetail.Stats.HomeRuns</h3>
+                        <p class="card-text text-muted">全壘打</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h3 class="card-title">@Model.BatterDetail.Stats.PAsPerHomeRun</h3>
+                        <p class="card-text text-muted">平均幾個打席有一支全壘打</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h3 class="card-title">@Model.BatterDetail.Stats.Hits</h3>
+                        <p class="card-text text-muted">安打數</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h3 class="card-title">@Model.BatterDetail.Stats.AverageHitsPerGame</h3>
+                        <p class="card-text text-muted">平均每場安打數</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h3 class="card-title">@Model.BatterDetail.Stats.BattingAverage</h3>
+                        <p class="card-text text-muted">打擊率</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h3 class="card-title">@Model.BatterDetail.Stats.SluggingPercentage</h3>
+                        <p class="card-text text-muted">長打率</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h3 class="card-title">@Model.BatterDetail.Stats.OnBasePercentage</h3>
+                        <p class="card-text text-muted">上壘率</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h3 class="card-title">@Model.BatterDetail.Stats.RBIs</h3>
+                        <p class="card-text text-muted">打點數</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h3 class="card-title">@Model.BatterDetail.Stats.StrikeOuts</h3>
+                        <p class="card-text text-muted">三振數</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h3 class="card-title">@Model.BatterDetail.Stats.Walks</h3>
+                        <p class="card-text text-muted">保送數</p>
+                    </div>
                 </div>
             </div>
         </div>
-        <div class="col-md-3 col-sm-6 mb-3">
-            <div class="card text-center">
-                <div class="card-body">
-                    <h3 class="card-title">@Model.Stats.TotalPAs</h3>
-                    <p class="card-text text-muted">總打席數</p>
+    }
+
+    <hr class="my-4" />
+
+    <!-- 投球統計數據 -->
+    @if (Model.PitcherDetail?.Stats != null)
+    {
+        <div class="row mb-4">
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h3 class="card-title">@Model.PitcherDetail.Stats.Games</h3>
+                        <p class="card-text text-muted">出賽數</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h3 class="card-title">@Model.PitcherDetail.Stats.TotalIP.ToString("F1")</h3>
+                        <p class="card-text text-muted">投球局數</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h3 class="card-title">@Model.PitcherDetail.Stats.AverageIPPerGame.ToString("F2")</h3>
+                        <p class="card-text text-muted">平均每場投球局數</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h3 class="card-title">@Model.PitcherDetail.Stats.ERA.ToString("F2")</h3>
+                        <p class="card-text text-muted">防禦率</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h3 class="card-title">@Model.PitcherDetail.Stats.WHIP.ToString("F2")</h3>
+                        <p class="card-text text-muted">WHIP</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h3 class="card-title">@Model.PitcherDetail.Stats.Strikeouts</h3>
+                        <p class="card-text text-muted">三振數</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h3 class="card-title">@Model.PitcherDetail.Stats.K9.ToString("F2")</h3>
+                        <p class="card-text text-muted">每九局三振率</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h3 class="card-title">@Model.PitcherDetail.Stats.Walks</h3>
+                        <p class="card-text text-muted">保送數</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h3 class="card-title">@Model.PitcherDetail.Stats.BB9.ToString("F2")</h3>
+                        <p class="card-text text-muted">每九局保送率</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h3 class="card-title">@Model.PitcherDetail.Stats.KBBRatio.ToString("F2")</h3>
+                        <p class="card-text text-muted">三振保送比</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h3 class="card-title">@Model.PitcherDetail.Stats.HitsAllowed</h3>
+                        <p class="card-text text-muted">被安打數</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h3 class="card-title">@Model.PitcherDetail.Stats.HomeRunsAllowed</h3>
+                        <p class="card-text text-muted">被全壘打數</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h3 class="card-title">@Model.PitcherDetail.Stats.OpponentBAA.ToString("F3")</h3>
+                        <p class="card-text text-muted">被打擊率</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h3 class="card-title">@Model.PitcherDetail.Stats.AveragePitchesPerGame.ToString("F1")</h3>
+                        <p class="card-text text-muted">平均每場用球數</p>
+                    </div>
                 </div>
             </div>
         </div>
-        <div class="col-md-3 col-sm-6 mb-3">
-            <div class="card text-center">
-                <div class="card-body">
-                    <h3 class="card-title">@Model.Stats.AveragePAsPerGame</h3>
-                    <p class="card-text text-muted">平均每場打席數</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3 col-sm-6 mb-3">
-            <div class="card text-center">
-                <div class="card-body">
-                    <h3 class="card-title">@Model.Stats.HomeRuns</h3>
-                    <p class="card-text text-muted">全壘打</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3 col-sm-6 mb-3">
-            <div class="card text-center">
-                <div class="card-body">
-                    <h3 class="card-title">@Model.Stats.PAsPerHomeRun</h3>
-                    <p class="card-text text-muted">平均幾個打席有一支全壘打</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3 col-sm-6 mb-3">
-            <div class="card text-center">
-                <div class="card-body">
-                    <h3 class="card-title">@Model.Stats.Hits</h3>
-                    <p class="card-text text-muted">安打數</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3 col-sm-6 mb-3">
-            <div class="card text-center">
-                <div class="card-body">
-                    <h3 class="card-title">@Model.Stats.AverageHitsPerGame</h3>
-                    <p class="card-text text-muted">平均每場安打數</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3 col-sm-6 mb-3">
-            <div class="card text-center">
-                <div class="card-body">
-                    <h3 class="card-title">@Model.Stats.BattingAverage</h3>
-                    <p class="card-text text-muted">打擊率</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3 col-sm-6 mb-3">
-            <div class="card text-center">
-                <div class="card-body">
-                    <h3 class="card-title">@Model.Stats.SluggingPercentage</h3>
-                    <p class="card-text text-muted">長打率</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3 col-sm-6 mb-3">
-            <div class="card text-center">
-                <div class="card-body">
-                    <h3 class="card-title">@Model.Stats.OnBasePercentage</h3>
-                    <p class="card-text text-muted">上壘率</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3 col-sm-6 mb-3">
-            <div class="card text-center">
-                <div class="card-body">
-                    <h3 class="card-title">@Model.Stats.RBIs</h3>
-                    <p class="card-text text-muted">打點數</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3 col-sm-6 mb-3">
-            <div class="card text-center">
-                <div class="card-body">
-                    <h3 class="card-title">@Model.Stats.StrikeOuts</h3>
-                    <p class="card-text text-muted">三振數</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3 col-sm-6 mb-3">
-            <div class="card text-center">
-                <div class="card-body">
-                    <h3 class="card-title">@Model.Stats.Walks</h3>
-                    <p class="card-text text-muted">保送數</p>
-                </div>
-            </div>
-        </div>
-    </div>
+    }
+
+    <hr class="my-4" />
 
     <!-- 系列賽分析：選單 + 圖表 -->
     <div class="card mb-4">
@@ -156,97 +304,241 @@
             <h4 class="mb-0 me-2">系列賽分析</h4>
         </div>
         <div class="card-body">
-            <div class="row gy-3">
-                <div class="col-md-6">
-                    <div id="lineChart" style="height:320px;"></div>
+            @{
+                bool hasBatter = Model.BatterDetail?.Stats != null;
+                bool hasPitcher = Model.PitcherDetail?.Stats != null;
+                bool isDoubleDuty = hasBatter && hasPitcher;
+            }
+            
+            @if (hasBatter)
+            {
+                <div class="@(isDoubleDuty ? "mb-4" : "")">
+                    @if (isDoubleDuty)
+                    {
+                        <h5 class="mb-3">打擊表現</h5>
+                    }
+                    <div class="row gy-3">
+                        <div class="col-md-6">
+                            <div id="batterLineChart" style="height:320px;"></div>
+                        </div>
+                        <div class="col-md-6">
+                            <div id="batterRadarChart" style="height:320px;"></div>
+                        </div>
+                    </div>
                 </div>
-                <div class="col-md-6">
-                    <div id="radarChart" style="height:320px;"></div>
+            }
+            
+            @if (hasPitcher)
+            {
+                <div>
+                    @if (isDoubleDuty)
+                    {
+                        <hr class="my-4" />
+                        <h5 class="mb-3">投球表現</h5>
+                    }
+                    <div class="row gy-3">
+                        <div class="col-md-6">
+                            <div id="pitcherLineChart" style="height:320px;"></div>
+                        </div>
+                        <div class="col-md-6">
+                            <div id="pitcherRadarChart" style="height:320px;"></div>
+                        </div>
+                    </div>
                 </div>
-            </div>
-            <hr />
+            }
         </div>
     </div>
+
+    <hr class="my-4" />
 
     <!-- 逐場表現 -->
-    <div class="card mb-4">
-        <div class="card-header">
-            <h4>逐場表現</h4>
-        </div>
-        <div class="card-body">
-            <div class="table-responsive">
-                <table id="battingTable" class="table table-hover">
-                    <thead>
-                        <tr>
-                            <th>日期</th>
-                            <th>賽季名稱</th>
-                            <th>場次</th>
-                            <th>打席</th>
-                            <th>安打</th>
-                            <th>全壘打</th>
-                            <th>打點</th>
-                            <th>三振</th>
-                            <th>保送</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var game in Model.Stats.GameStats)
-                        {
+    @if (Model.BatterDetail?.Stats != null)
+    {
+        <div class="card mb-4">
+            <div class="card-header">
+                <h4>逐場打擊表現</h4>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table id="battingTable" class="table table-hover">
+                        <thead>
                             <tr>
-                                <td>@game.Date.ToString("yyyy/MM/dd")</td>
-                                <td>@game.SeasonName</td>
-                                <td>G@(game.Seq)</td>
-                                <td>@game.PA</td>
-                                <td>@game.H</td>
-                                <td>@game.HR</td>
-                                <td>@game.RBI</td>
-                                <td>@game.SO</td>
-                                <td>@game.BB</td>
+                                <th>日期</th>
+                                <th>賽季名稱</th>
+                                <th>場次</th>
+                                <th>打席</th>
+                                <th>安打</th>
+                                <th>全壘打</th>
+                                <th>打點</th>
+                                <th>三振</th>
+                                <th>保送</th>
                             </tr>
-                        }
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody>
+                            @foreach (BatterGameStat game in Model.BatterDetail.Stats.GameStats)
+                            {
+                                <tr>
+                                    <td>@game.Date.ToString(format: "yyyy/MM/dd")</td>
+                                    <td>@game.SeasonName</td>
+                                    <td>G@(game.Seq)</td>
+                                    <td>@game.PA</td>
+                                    <td>@game.H</td>
+                                    <td>@game.HR</td>
+                                    <td>@game.RBI</td>
+                                    <td>@game.SO</td>
+                                    <td>@game.BB</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
-    </div>
+    }
+
+    <hr class="my-4" />
+
+    @if (Model.PitcherDetail?.Stats != null)
+    {
+        <div class="card mb-4">
+            <div class="card-header">
+                <h4>逐場投球表現</h4>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table id="pitchingTable" class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>日期</th>
+                                <th>賽季名稱</th>
+                                <th>場次</th>
+                                <th>對手</th>
+                                <th>先發</th>
+                                <th>投球局數</th>
+                                <th>用球數</th>
+                                <th>被安打</th>
+                                <th>被全壘打</th>
+                                <th>三振</th>
+                                <th>保送</th>
+                                <th>失分</th>
+                                <th>自責分</th>
+                                <th>ERA</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (PitcherGameStat game in Model.PitcherDetail.Stats.GameStats)
+                            {
+                                <tr>
+                                    <td>@game.Date.ToString(format: "yyyy/MM/dd")</td>
+                                    <td>@game.SeasonName</td>
+                                    <td>G@(game.Seq)</td>
+                                    <td>@game.Opponent</td>
+                                    <td>@(game.IsStarter ? "先發" : "後援")</td>
+                                    <td>@game.IP.ToString("F1")</td>
+                                    <td>@game.NP</td>
+                                    <td>@game.H</td>
+                                    <td>@game.HR</td>
+                                    <td>@game.SO</td>
+                                    <td>@game.BB</td>
+                                    <td>@game.R</td>
+                                    <td>@game.ER</td>
+                                    <td>@game.ERA.ToString("F2")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+
+    <hr class="my-4" />
 
     <!-- 最佳打席 (依WPA排序) -->
-    <div class="card">
-        <div class="card-header">
-            <h4>最佳打席 (依WPA排序)</h4>
-        </div>
-        <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
-                        <tr>
-                            <th>日期</th>
-                            <th>賽季名稱</th>
-                            <th>場次</th>
-                            <th>局數</th>
-                            <th>打席</th>
-                            <th>結果</th>
-                            <th>WPA</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (dynamic pa in Model.Stats.BestPAs)
-                        {
+    @if (Model.BatterDetail?.Stats != null)
+    {
+        <div class="card">
+            <div class="card-header">
+                <h4>最佳打席 (依WPA排序)</h4>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
                             <tr>
-                                <td>@pa.Date.ToString("yyyy/MM/dd")</td>
-                                <td>@pa.SeasonName</td>
-                                <td>G@(pa.Seq)</td>
-                                <td>@pa.Inning</td>
-                                <td>@pa.PASeq</td>
-                                <td>@pa.PAResult</td>
-                                <td>@pa.WPA?.ToString("F3")</td>
+                                <th>日期</th>
+                                <th>賽季名稱</th>
+                                <th>場次</th>
+                                <th>局數</th>
+                                <th>打席</th>
+                                <th>結果</th>
+                                <th>WPA</th>
                             </tr>
-                        }
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody>
+                            @foreach (dynamic pa in Model.BatterDetail.Stats.BestPAs)
+                            {
+                                <tr>
+                                    <td>@pa.Date.ToString(format: "yyyy/MM/dd")</td>
+                                    <td>@pa.SeasonName</td>
+                                    <td>G@(pa.Seq)</td>
+                                    <td>@pa.Inning</td>
+                                    <td>@pa.PASeq</td>
+                                    <td>@pa.PAResult</td>
+                                    <td>@pa.WPA?.ToString("F3")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
-    </div>
+    }
+
+    <hr class="my-4" />
+
+    <!-- 最佳投球表現 -->
+    @if (Model.PitcherDetail?.Stats != null)
+    {
+        <div class="card">
+            <div class="card-header">
+                <h4>最佳投球表現</h4>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>日期</th>
+                                <th>賽季名稱</th>
+                                <th>場次</th>
+                                <th>對手</th>
+                                <th>投球局數</th>
+                                <th>三振</th>
+                                <th>防禦率</th>
+                                <th>評分</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (BestPitchingPerformance perf in Model.PitcherDetail.Stats.BestPerformances)
+                            {
+                                <tr>
+                                    <td>@perf.Date.ToString(format: "yyyy/MM/dd")</td>
+                                    <td>@perf.SeasonName</td>
+                                    <td>G@(perf.Seq)</td>
+                                    <td>@perf.Opponent</td>
+                                    <td>@perf.IP.ToString("F1")</td>
+                                    <td>@perf.SO</td>
+                                    <td>@perf.ERA.ToString("F2")</td>
+                                    <td>@perf.Score.ToString("F1")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
 </div>
 
 @using System.Text.Json
@@ -254,17 +546,33 @@
 @section Scripts {
     <script src="~/lib/echarts/echarts.min.js"></script>
     <script src="~/js/playerDetail.js" asp-append-version="true"></script>
-    <script>
-        // 從後端取得比賽數據
-        const gameStats = @Html.Raw(JsonSerializer.Serialize(Model.Stats.GameStats));
-        const percentileRanks = @Html.Raw(JsonSerializer.Serialize(Model.Stats.PercentileRanks));
-        const seasonAverages = @Html.Raw(JsonSerializer.Serialize(Model.Stats.SeasonAverages));
-        const playerId = '@Model.Player.PlayerId';
-        const seasonId = '@Model.SeasonId';
-        const actionUrl = '@Url.Action("PlayerDetail", "Baseball")';
 
-        // 初始化模組
-        PlayerDetailModule.init(gameStats, seasonId, percentileRanks, seasonAverages);
-        PlayerDetailModule.setupSeasonSelector(playerId, actionUrl);
+    <script>
+        @{
+            string playerId = "";
+
+            // 判斷球員類型
+            bool hasBatter = Model.BatterDetail?.Stats != null;
+
+            if (hasBatter)
+            {
+                playerId = Model.BatterDetail!.Batter.PlayerId;
+            }
+            else
+            {
+                playerId = Model.PitcherDetail!.Pitcher.PlayerId;
+            }
+        }
+        
+        @if (!string.IsNullOrEmpty(playerId))
+        {
+            @:const playerId = '@playerId';
+            @:const seasonId = '@Model.SeasonId';
+            @:const actionUrl = '@Url.Action(action: "PlayerDetail", controller: "Baseball")';
+            @:
+            @:// 初始化模組（使用 API 載入數據）
+            @:PlayerDetailModule.init(playerId, seasonId);
+            @:PlayerDetailModule.setupSeasonSelector(playerId, actionUrl);
+        }
     </script>
 }

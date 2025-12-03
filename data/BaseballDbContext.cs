@@ -104,6 +104,13 @@ public class BaseballDbContext : DbContext
                 .HasPrincipalKey(b => b.PlayerId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            // 關聯關係：PlayerTeam -> Pitcher
+            entity.HasOne(pt => pt.Pitcher)
+                .WithMany(p => p.PlayerTeams)
+                .HasForeignKey(pt => pt.PlayerId)
+                .HasPrincipalKey(p => p.PlayerId)
+                .OnDelete(DeleteBehavior.Restrict);
+
             // 關聯關係：PlayerTeam -> Team
             entity.HasOne(pt => pt.Team)
                 .WithMany(t => t.PlayerTeams)

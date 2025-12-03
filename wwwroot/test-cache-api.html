@@ -87,6 +87,12 @@
             <br><br>
             <button class="success" onclick="updateBatting()">⚾ 更新打者排行榜</button>
             <button class="success" onclick="updatePitching()">🥎 更新投手排行榜</button>
+            <button class="success" onclick="updateTeam()">🏟️ 更新球隊排行榜</button>
+        </div>
+
+        <div class="section">
+            <h3>更新球隊排行榜（所有賽季）</h3>
+            <button class="info" onclick="updateAllTeams()">🏆 更新所有球隊排行榜</button>
         </div>
 
         <div class="section">
@@ -174,6 +180,37 @@
             showLoading();
             try {
                 const response = await fetch(`/api/rankingcache/status/${seasonId}`);
+                const data = await response.json();
+                showResult(data, response.ok ? 'success' : 'error');
+            } catch (error) {
+                showResult({ error: error.message }, 'error');
+            }
+        }
+
+        async function updateTeam() {
+            const seasonId = document.getElementById('seasonId').value;
+            if (!seasonId) {
+                alert('請輸入賽季 ID');
+                return;
+            }
+            showLoading();
+            try {
+                const response = await fetch(`/api/rankingcache/team/${seasonId}`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                showResult(data, response.ok ? 'success' : 'error');
+            } catch (error) {
+                showResult({ error: error.message }, 'error');
+            }
+        }
+
+        async function updateAllTeams() {
+            showLoading();
+            try {
+                const response = await fetch('/api/rankingcache/team', {
+                    method: 'POST'
+                });
                 const data = await response.json();
                 showResult(data, response.ok ? 'success' : 'error');
             } catch (error) {
