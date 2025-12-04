@@ -99,6 +99,28 @@ public class RankingCacheController : ControllerBase
     }
 
     /// <summary>
+    /// 重新計算所有賽季的 tblTeamSeasonRankingCache（包括 seasonId=ALL）
+    /// </summary>
+    [HttpPost("team/rebuild/all")]
+    public async Task<IActionResult> RebuildAllTeamRankings()
+    {
+        try
+        {
+            _logger.LogInformation("手動觸發重新計算所有球隊排行榜快取（包括 ALL 季）");
+            
+            // 先更新所有指定賽季的排行榜
+            await _rankingCacheService.UpdateTeamRankingsAsync();
+            
+            return Ok(new { message = "所有球隊排行榜快取已重新計算（包括 seasonId=ALL）" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "重新計算所有球隊排行榜快取失敗");
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// 手動更新所有賽季的排行榜快取（包含球員與球隊）
     /// </summary>
     [HttpPost("all")]

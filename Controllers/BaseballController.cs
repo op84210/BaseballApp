@@ -152,20 +152,24 @@ public class BaseballController : Controller
     /// <param name="teamId">
     /// 球隊識別碼
     /// </param>
+    /// <param name="playerType">
+    /// 球員類型，"batter" 或 "pitcher"
+    /// </param>
     /// <returns>
     /// 球員列表頁面
     /// </returns>
-    public async Task<IActionResult> Players(string? seasonId = null, string? teamId = null)
+    public async Task<IActionResult> Players(string? seasonId = null, string? teamId = null, string? playerType = null)
     {
         try
         {
             seasonId ??= "ALL";
 
-            var batters = await _baseballDbService.GetAllBattersAsync(seasonId == "ALL" ? null : seasonId);
-            var teams = await _baseballDbService.GetAllTeamsAsync();
+            var batters = await _baseballDbService.GetAllBattersAsync(seasonId);
+            var pitchers = await _baseballDbService.GetAllPitchersAsync(seasonId);
+            var teams = await _baseballDbService.GetAllTeamsAsync(seasonId);
             var seasons = await _baseballDbService.GetAllSeasonsAsync();
 
-            // 根據球隊篩選
+            // 根據球隊篩選打者
             if (!string.IsNullOrEmpty(teamId))
             {
                 batters = batters.Where(b =>
@@ -184,15 +188,72 @@ public class BaseballController : Controller
                         .FirstOrDefault();
                     return latestTeamFallback?.TeamId == teamId;
                 }).ToList();
+
+                // 根據球隊篩選投手
+                pitchers = pitchers.Where(p =>
+                {
+                    // 優先使用指定 seasonId 的球隊
+                    if (seasonId != "ALL")
+                    {
+                        var teamInSeason = p.PlayerTeams.FirstOrDefault(pt => pt.SeasonId == seasonId && pt.TeamId == teamId);
+                        if (teamInSeason != null)
+                            return true;
+                    }
+
+                    // 若無指定 seasonId 的球隊，則取最新的球隊
+                    var latestTeamFallback = p.PlayerTeams
+                        .OrderByDescending(pt => pt.StartDate)
+                        .FirstOrDefault();
+                    return latestTeamFallback?.TeamId == teamId;
+                }).ToList();
             }
 
-            ViewBag.SeasonId = seasonId;
-            ViewBag.TeamId = teamId;
-            ViewBag.Batters = batters.OrderBy(b => int.TryParse(b.PlayerNumber, out var num) ? num : 999).ToList();
-            ViewBag.Teams = teams.ToList();
-            ViewBag.Seasons = seasons.ToList();
+            var seasonOptions = seasons
+                .OrderByDescending(s => s.SeasonId)
+                .Select(s => new SelectListItem
+                {
+                    Value = s.SeasonId,
+                    Text = s.SeasonName ?? s.SeasonId,
+                    Selected = (s.SeasonId == seasonId)
+                })
+                .ToList();
 
-            return View();
+            seasonOptions.Insert(0, new SelectListItem
+            {
+                Value = "ALL",
+                Text = "全部賽季",
+                Selected = (seasonId == "ALL")
+            });
+
+            var teamOptions = teams
+                .OrderBy(t => t.TeamName)
+                .Select(t => new SelectListItem
+                {
+                    Value = t.TeamId,
+                    Text = t.TeamName,
+                    Selected = (t.TeamId == teamId)
+                })
+                .ToList();
+
+            teamOptions.Insert(0, new SelectListItem
+            {
+                Value = "",
+                Text = "全部球隊",
+                Selected = string.IsNullOrEmpty(teamId)
+            });
+
+            var vm = new PlayersViewModel
+            {
+                SeasonId = seasonId,
+                TeamId = teamId,
+                PlayerType = playerType,
+                SeasonOptions = seasonOptions,
+                TeamOptions = teamOptions,
+                Batters = batters.OrderBy(b => int.TryParse(b.PlayerNumber, out var num) ? num : 999).Cast<Player>().ToList(),
+                Pitchers = pitchers.OrderBy(p => int.TryParse(p.PlayerNumber, out var num) ? num : 999).Cast<Player>().ToList()
+            };
+
+            return View(vm);
         }
         catch (Exception ex)
         {
@@ -253,70 +314,29 @@ public class BaseballController : Controller
         }
     }
 
-    // 建立打者詳細資料
+    /// <summary>
+    /// 建立打者詳細資料
+    /// </summary>
+    /// <param name="playerId">
+    /// 球員識別碼
+    /// </param>
+    /// <param name="seasonId">
+    /// 賽季識別碼，格式例如 "CPBL-2024-HE"
+    /// </param>
+    /// <returns>
+    /// 打者詳細資料模型，若找不到則回傳 null
+    /// </returns>
     private async Task<BatterDetailModel?> BuildBatterDetail(string playerId, string? seasonId)
     {
         var batter = await _baseballDbService.GetBatterAsync(playerId);
         if (batter == null) return null;
 
-        var seasons = await _baseballDbService.GetAllSeasonsAsync();
+        var seasonsDict = (await _baseballDbService.GetAllSeasonsAsync()).ToDictionary(s => s.SeasonId, s => s.SeasonName ?? s.SeasonId);
         var paList = await _baseballDbService.GetPAAsync(batterId: playerId, seasonId: seasonId);
+        var batterTeam = batter.PlayerTeams.FirstOrDefault()?.TeamId;
 
-        var batterGameStats = paList
-            .GroupBy(pa => new { pa.SeasonId, pa.GameSeq })
-            .Select(g => new BatterGameStat
-            {
-                Date = g.FirstOrDefault()?.Game?.Date ?? DateTime.MinValue,
-                SeasonName = seasons.FirstOrDefault(s => s.SeasonId == g.Key.SeasonId)?.SeasonName ?? "Unknown",
-                Seq = g.Key.GameSeq,
-                PA = g.Count(),
-                _1B = g.Count(pa => pa.Result == "1B"),
-                _2B = g.Count(pa => pa.Result == "2B"),
-                _3B = g.Count(pa => pa.Result == "3B"),
-                HR = g.Count(pa => pa.Result == "HR"),
-                IHR = g.Count(pa => pa.Result == "IHR"),
-                SO = g.Count(pa => pa.Result == "SO"),
-                uBB = g.Count(pa => pa.Result == "uBB"),
-                IBB = g.Count(pa => pa.Result == "IBB"),
-                HBP = g.Count(pa => pa.Result == "HBP"),
-                GO = g.Count(pa => pa.Result == "GO"),
-                FO = g.Count(pa => pa.Result == "FO"),
-                FC = g.Count(pa => pa.Result == "FC"),
-                E = g.Count(pa => pa.Result == "E"),
-                SH = g.Count(pa => pa.Result == "SH"),
-                SF = g.Count(pa => pa.Result == "SF"),
-                GIDP = g.Count(pa => pa.Result == "GIDP"),
-                DP = g.Count(pa => pa.Result == "DP"),
-                TP = g.Count(pa => pa.Result == "TP"),
-                IH = g.Count(pa => pa.Result == "IH"),
-                IR = g.Count(pa => pa.Result == "IR"),
-                ID = g.Count(pa => pa.Result == "ID"),
-                IGNORE = g.Count(pa => pa.Result == "IGNORE"),
-                RBI = g.Sum(pa => pa.RBI ?? 0),
-                Opponent = (g.FirstOrDefault()?.Game?.HomeTeam == batter.PlayerTeams ?
-                    g.FirstOrDefault()?.Game?.AwayTeam?.TeamName : 
-                    g.FirstOrDefault()?.Game?.HomeTeam?.TeamName) ?? 
-                    "Unknown",
-                IsHome = g.FirstOrDefault()?.Game?.HomeTeam == batter.PlayerTeams
-            })
-            .OrderBy(x => x.Date)
-            .ToList();
-
-        var bestPAs = paList
-            .Where(pa => pa.WPA.HasValue)
-            .OrderByDescending(pa => pa.WPA)
-            .Take(5)
-            .Select(pa => new BestPA
-            {
-                Date = pa?.Game?.Date ?? DateTime.MinValue,
-                SeasonName = seasons.FirstOrDefault(s => s.SeasonId == pa?.SeasonId)?.SeasonName ?? "Unknown",
-                Seq = pa?.GameSeq ?? 0,
-                Inning = pa?.Inning ?? 0,
-                PASeq = pa?.PaSeq ?? 0,
-                PAResult = pa?.Result ?? string.Empty,
-                WPA = pa?.WPA
-            })
-            .ToList();
+        var batterGameStats = BuildBatterGameStats(paList.ToList(), seasonsDict, batterTeam);
+        var bestPAs = BuildBestPAs(paList.ToList(), seasonsDict, batterTeam);
 
         return new BatterDetailModel
         {
@@ -329,16 +349,186 @@ public class BaseballController : Controller
         };
     }
 
-    // 建立投手詳細資料
+    /// <summary>
+    /// 建立打者每場統計
+    /// </summary>
+    /// <param name="paList">
+    /// 打席列表
+    /// </param>
+    /// <param name="seasonsDict">
+    /// 賽季字典
+    /// </param>
+    /// <param name="batterTeam">
+    /// 打者所屬球隊ID
+    /// </param>
+    /// <returns>
+    /// 打者每場統計列表
+    /// </returns>
+    private List<BatterGameStat> BuildBatterGameStats(List<PA> paList, Dictionary<string, string> seasonsDict, string? batterTeam)
+    {
+        return paList
+            .GroupBy(pa => new { pa.SeasonId, pa.GameSeq })
+            .Select(g =>
+            {
+                var first = g.FirstOrDefault();
+                var game = first?.Game;
+                var seasonName = seasonsDict.TryGetValue(g.Key.SeasonId!, out var sn) ? sn : "Unknown";
+                var is_home = game?.HomeTeamId == batterTeam;
+
+                return new BatterGameStat
+                {
+                    Date = game?.Date ?? DateTime.MinValue,
+                    SeasonName = seasonName,
+                    Seq = g.Key.GameSeq,
+                    PA = g.Count(),
+                    _1B = g.Count(pa => pa.Result == "1B"),
+                    _2B = g.Count(pa => pa.Result == "2B"),
+                    _3B = g.Count(pa => pa.Result == "3B"),
+                    HR = g.Count(pa => pa.Result == "HR"),
+                    IHR = g.Count(pa => pa.Result == "IHR"),
+                    SO = g.Count(pa => pa.Result == "SO"),
+                    uBB = g.Count(pa => pa.Result == "uBB"),
+                    IBB = g.Count(pa => pa.Result == "IBB"),
+                    HBP = g.Count(pa => pa.Result == "HBP"),
+                    GO = g.Count(pa => pa.Result == "GO"),
+                    FO = g.Count(pa => pa.Result == "FO"),
+                    FC = g.Count(pa => pa.Result == "FC"),
+                    E = g.Count(pa => pa.Result == "E"),
+                    SH = g.Count(pa => pa.Result == "SH"),
+                    SF = g.Count(pa => pa.Result == "SF"),
+                    GIDP = g.Count(pa => pa.Result == "GIDP"),
+                    DP = g.Count(pa => pa.Result == "DP"),
+                    TP = g.Count(pa => pa.Result == "TP"),
+                    IH = g.Count(pa => pa.Result == "IH"),
+                    IR = g.Count(pa => pa.Result == "IR"),
+                    ID = g.Count(pa => pa.Result == "ID"),
+                    IGNORE = g.Count(pa => pa.Result == "IGNORE"),
+                    RBI = g.Sum(pa => pa.RBI ?? 0),
+                    Opponent = GetOpponentTeamName(game, batterTeam),
+                    IsHome = is_home
+                };
+            })
+            .OrderBy(x => x.Date)
+            .ToList();
+    }
+
+    /// <summary>
+    /// 建立最佳打席
+    /// </summary>
+    /// <param name="paList">
+    /// 打席列表
+    /// </param>
+    /// <param name="seasonsDict">
+    /// 賽季字典
+    /// </param>
+    /// <param name="batterTeam">
+    /// 打者所屬球隊ID
+    /// </param>
+    /// <returns>
+    /// 最佳打席列表
+    /// </returns>
+    private List<BestPA> BuildBestPAs(List<PA> paList, Dictionary<string, string> seasonsDict, string? batterTeam)
+    {
+        return paList
+            .Where(pa => pa.WPA.HasValue)
+            .OrderByDescending(pa => pa.WPA)
+            .Take(5)
+            .Select(pa => new BestPA
+            {
+                Date = pa.Game?.Date ?? DateTime.MinValue,
+                SeasonName = seasonsDict.TryGetValue(pa.SeasonId!, out var sn) ? sn : "Unknown",
+                Seq = pa.GameSeq,
+                Opponent = GetOpponentTeamName(pa.Game, batterTeam),
+                Inning = pa.Inning,
+                PASeq = pa.PaSeq,
+                PAResult = pa.Result ?? string.Empty,
+                WPA = pa.WPA
+            })
+            .ToList();
+    }
+
+    /// <summary>
+    /// 取得對手隊名
+    /// </summary>
+    /// <param name="game">
+    /// 比賽物件
+    /// </param>
+    /// <param name="playerTeamId">
+    /// 球員所屬球隊ID
+    /// </param>
+    /// <returns>
+    /// 對手隊名
+    /// </returns>
+    private string GetOpponentTeamName(Game? game, string? playerTeamId)
+    {
+        if (game?.HomeTeamId == null)
+            return "Unknown";
+
+        var is_home = game.HomeTeamId == playerTeamId;
+        return (is_home ? game.AwayTeam?.TeamName : game.HomeTeam?.TeamName) ?? "Unknown";
+    }
+
+    /// <summary>
+    /// 建立投手詳細資料
+    /// </summary>
+    /// <param name="playerId">
+    /// 投手識別碼
+    /// </param>
+    /// <param name="seasonId">
+    /// 賽季識別碼
+    /// </param>
+    /// <returns>
+    /// 投手詳細資料模型
+    /// </returns>
     private async Task<PitcherDetailModel?> BuildPitcherDetail(string playerId, string? seasonId)
     {
+        // 取得投手基本資料
         var pitcher = await _baseballDbService.GetPitcherAsync(playerId);
         if (pitcher == null) return null;
 
+        // 取得投手成績資料
         var pitcherBoxes = await _baseballDbService.GetPitcherBoxAsync(seasonId: seasonId);
         var seasonsDict = (await _baseballDbService.GetAllSeasonsAsync()).ToDictionary(s => s.SeasonId, s => s.SeasonName ?? s.SeasonId);
+        var pitcherTeam = pitcher.PlayerTeams.FirstOrDefault()?.TeamId;
 
-        var pitcherGameStats = pitcherBoxes
+        // 建立投手每場統計與最佳投手表現
+        var pitcherGameStats = BuildPitcherGameStats(pitcherBoxes.ToList(), playerId, seasonsDict, pitcherTeam);
+        var bestPitchingPerformances = BuildBestPitchingPerformances(pitcherGameStats);
+
+        // 回傳投手詳細資料模型
+        return new PitcherDetailModel
+        {
+            Pitcher = pitcher,
+            Stats = new PitcherStats
+            {
+                GameStats = pitcherGameStats,
+                BestPerformances = bestPitchingPerformances
+            }
+        };
+    }
+
+    /// <summary>
+    /// 建立投手每場統計
+    /// </summary>
+    /// <param name="pitcherBoxes">
+    /// 投手 Box 列表
+    /// </param>
+    /// <param name="playerId">
+    /// 投手識別碼
+    /// </param>
+    /// <param name="seasonsDict">
+    /// 賽季字典
+    /// </param>
+    /// <param name="pitcherTeam">
+    /// 投手所屬球隊ID
+    /// </param>
+    /// <returns>
+    /// 投手每場統計列表
+    /// </returns>
+    private List<PitcherGameStat> BuildPitcherGameStats(List<PitcherBox> pitcherBoxes, string playerId, 
+        Dictionary<string, string> seasonsDict, string? pitcherTeam)
+    {
+        return pitcherBoxes
             .Where(pb => pb.PlayerId == playerId)
             .GroupBy(pb => new { pb.SeasonId, pb.GameSeq })
             .Select(g =>
@@ -353,14 +543,16 @@ public class BaseballController : Controller
                 int np = g.Sum(x => x.NP ?? 0);
                 int bf = g.Sum(x => x.BF ?? 0);
                 int r = g.Sum(x => x.R ?? 0);
-                decimal era = ipOuts > 0 ? Math.Round((decimal)er * 27 / ipOuts, 2) : 0;
+
+                var game = first?.Game;
+                var opponentName = GetOpponentTeamName(game, pitcherTeam);
 
                 return new PitcherGameStat
                 {
                     Date = first?.Game?.Date ?? DateTime.MinValue,
                     SeasonName = seasonsDict.TryGetValue(g.Key.SeasonId!, out var sn) ? sn : (g.Key.SeasonId ?? "Unknown"),
                     Seq = g.Key.GameSeq,
-                    Opponent = (first?.Game?.HomeTeamId == first?.Game?.AwayTeamId ? first?.Game?.AwayTeam?.TeamName : first?.Game?.HomeTeam?.TeamName) ?? "Unknown",
+                    Opponent = opponentName,
                     IsStarter = false,
                     IPOuts = ipOuts,
                     NP = np,
@@ -375,8 +567,20 @@ public class BaseballController : Controller
             })
             .OrderBy(x => x.Date)
             .ToList();
+    }
 
-        var bestPitchingPerformances = pitcherGameStats
+    /// <summary>
+    /// 建立最佳投手表現
+    /// </summary>
+    /// <param name="pitcherGameStats">
+    /// 投手每場統計列表
+    /// </param>
+    /// <returns>
+    /// 最佳投手表現列表
+    /// </returns>
+    private List<BestPitchingPerformance> BuildBestPitchingPerformances(List<PitcherGameStat> pitcherGameStats)
+    {
+        return pitcherGameStats
             .Select(g => new BestPitchingPerformance
             {
                 Date = g.Date,
@@ -391,18 +595,8 @@ public class BaseballController : Controller
             .OrderByDescending(x => x.Score)
             .Take(5)
             .ToList();
-
-        return new PitcherDetailModel
-        {
-            Pitcher = pitcher,
-            Stats = new PitcherStats
-            {
-                GameStats = pitcherGameStats,
-                BestPerformances = bestPitchingPerformances
-            }
-        };
     }
-   
+
     /// <summary>
     /// 初始化排行榜 ViewModel
     /// </summary>
@@ -424,7 +618,7 @@ public class BaseballController : Controller
         };
 
         // 讀取賽季資料並插入 "ALL" 選項於最前
-        vm.Seasons = GetAllSeasonsAsync().Result;
+        vm.Seasons = await GetAllSeasonsAsync();
 
         // 計算門檻：單季 -> 打席 >= 120 * 3.1；投手局數 >= 120。全部賽季不設門檻。
         vm.MinQualifiedPA = seasonId != "CPBL-2024-xa" ? 0 : (int)Math.Ceiling(120 * 3.1m);
@@ -439,13 +633,13 @@ public class BaseballController : Controller
     /// <returns>
     /// 賽季列表
     /// </returns>
-    private async Task<List<SelectListItem>> GetAllSeasonsAsync()
+    private async Task<List<SelectListItem>> GetAllSeasonsAsync(string? playerId = null)
     {
         try
         {
             List<SelectListItem> list = [];
 
-            var seasons = await _baseballDbService.GetAllSeasonsAsync();
+            var seasons = await _baseballDbService.GetAllSeasonsAsync(playerId);
 
             // 建立 SelectListItem 列表
             list = [.. seasons
@@ -490,7 +684,7 @@ public class BaseballController : Controller
         {
             // 初始化 ViewModel
             var vm = await initializeRankingViewModel(seasonId, category);
-    
+
             if (vm.Category == RankingCategory.Batting)
             {
                 return await GetBattingRankings(vm);

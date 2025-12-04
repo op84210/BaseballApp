@@ -14,6 +14,7 @@
     let batterSeasonAvg = {};
     let batterTeamAvg = {};
     let batterTeamPR = {};
+    let batterRadarStats = {};
 
     // 投手數據變數
     let pitcherGames = [];
@@ -21,6 +22,7 @@
     let pitcherSeasonAvg = {};
     let pitcherTeamAvg = {};
     let pitcherTeamPR = {};
+    let pitcherRadarStats = {};
 
     // 初始化函數（新版：支援 API 載入）
     function init(playerId, seasonId) {
@@ -69,22 +71,33 @@
                 fetch(`/api/playerdata/pitcher/${playerId}/chart?seasonId=${seasonId}`)
             ]);
 
+            let hasBatterData = false;
+            let hasPitcherData = false;
+
             if (batterResponse.ok) {
                 const batterData = await batterResponse.json();
-                batterGames = batterData.chartData || [];
-                batterPR = batterData.percentileRanks || {};
-                batterSeasonAvg = batterData.seasonAverages || {};
-                batterTeamAvg = batterData.teamAverages || {};
-                batterTeamPR = batterData.teamPercentileRanks || {};
+                if (batterData.hasData !== false) {
+                    batterGames = batterData.chartData || [];
+                    batterPR = batterData.percentileRanks || {};
+                    batterSeasonAvg = batterData.seasonAverages || {};
+                    batterTeamAvg = batterData.teamAverages || {};
+                    batterTeamPR = batterData.teamPercentileRanks || {};
+                    batterRadarStats = batterData.radarStats || {};
+                    hasBatterData = true;
+                }
             }
 
             if (pitcherResponse.ok) {
                 const pitcherData = await pitcherResponse.json();
-                pitcherGames = pitcherData.chartData || [];
-                pitcherPR = pitcherData.percentileRanks || {};
-                pitcherSeasonAvg = pitcherData.seasonAverages || {};
-                pitcherTeamAvg = pitcherData.teamAverages || {};
-                pitcherTeamPR = pitcherData.teamPercentileRanks || {};
+                if (pitcherData.hasData !== false) {
+                    pitcherGames = pitcherData.chartData || [];
+                    pitcherPR = pitcherData.percentileRanks || {};
+                    pitcherSeasonAvg = pitcherData.seasonAverages || {};
+                    pitcherTeamAvg = pitcherData.teamAverages || {};
+                    pitcherTeamPR = pitcherData.teamPercentileRanks || {};
+                    pitcherRadarStats = pitcherData.radarStats || {};
+                    hasPitcherData = true;
+                }
             }
 
             // 渲染所有圖表
@@ -95,65 +108,39 @@
         }
     }
 
-    // 計算統計數據
-    function calculateStats(games) {
-        if (!games || games.length === 0) return null;
-
-        const totalAB = games.reduce((sum, g) => sum + g.AB, 0);
-        const totalH = games.reduce((sum, g) => sum + g.H, 0);
-        const total1B = games.reduce((sum, g) => sum + g._1B, 0);
-        const total2B = games.reduce((sum, g) => sum + g._2B, 0);
-        const total3B = games.reduce((sum, g) => sum + g._3B, 0);
-        const totalHR = games.reduce((sum, g) => sum + g.HR, 0);
-        const totalBB = games.reduce((sum, g) => sum + g.BB, 0);
-        const totalHBP = games.reduce((sum, g) => sum + g.HBP, 0);
-        const totalSF = games.reduce((sum, g) => sum + g.SF, 0);
-        const totalSO = games.reduce((sum, g) => sum + g.SO, 0);
-        const totalRBI = games.reduce((sum, g) => sum + g.RBI, 0);
-
-        const AVG = totalAB > 0 ? totalH / totalAB : 0;
-        const OBP = (totalAB + totalBB + totalHBP + totalSF) > 0
-            ? (totalH + totalBB + totalHBP) / (totalAB + totalBB + totalHBP + totalSF)
-            : 0;
-        const totalBases = total1B + (total2B * 2) + (total3B * 3) + (totalHR * 4);
-        const SLG = totalAB > 0 ? totalBases / totalAB : 0;
-        const OPS = OBP + SLG;
-
-        return { AVG, OBP, SLG, OPS, HR: totalHR, RBI: totalRBI, SO: totalSO, BB: totalBB };
-    }
-
     // 渲染折線圖
     function renderBatterLineChart(seasonId) {
         if (!seasonId || !batterLineChart) {
             return;
         }
 
-        // 累積統計
-        let cumulative = { AB: 0, H: 0, BB: 0, HBP: 0, SF: 0, _1B: 0, _2B: 0, _3B: 0, HR: 0, IHR: 0 };
-        const avgData = [];
-        const opsData = [];
+        if (!batterGames.length) {
+            batterLineChart.setOption({
+                title: { 
+                    text: '無法顯示折線圖', 
+                    left: 'center', 
+                    textStyle: { fontSize: 16, color: '#999' },
+                    subtext: '該球員在此賽季沒有打擊數據',
+                    subtextStyle: { fontSize: 12, color: '#999' }
+                },
+                graphic: {
+                    type: 'text',
+                    left: 'center',
+                    top: 'middle',
+                    style: {
+                        text: '⚠ 沒有比賽數據',
+                        fontSize: 16,
+                        fill: '#999',
+                        textAlign: 'center'
+                    }
+                }
+            });
+            return;
+        }
 
-        batterGames.forEach(g => {
-            cumulative.AB += g.AB;
-            cumulative.H += g.H;
-            cumulative.BB += g.BB;
-            cumulative.HBP += g.HBP;
-            cumulative.SF += g.SF;
-            cumulative._1B += g._1B;
-            cumulative._2B += g._2B;
-            cumulative._3B += g._3B;
-            cumulative.HR += g.HR;
-            cumulative.IHR += g.IHR;
-
-            const avg = cumulative.AB > 0 ? cumulative.H / cumulative.AB : 0;
-            const obpDen = cumulative.AB + cumulative.BB + cumulative.HBP + cumulative.SF;
-            const obp = obpDen > 0 ? (cumulative.H + cumulative.BB + cumulative.HBP) / obpDen : 0;
-            const totalBases = cumulative._1B + cumulative._2B * 2 + cumulative._3B * 3 + (cumulative.HR + cumulative.IHR) * 4;
-            const slg = cumulative.AB > 0 ? totalBases / cumulative.AB : 0;
-            const ops = obp + slg;
-            avgData.push(+avg.toFixed(3));
-            opsData.push(+ops.toFixed(3));
-        });
+        // 使用後端計算的數據
+        const avgData = batterGames.map(g => +g.avgData.toFixed(3));
+        const opsData = batterGames.map(g => +g.opsData.toFixed(3));
 
         // 折線圖配置
         batterLineChart.setOption({
@@ -163,7 +150,7 @@
             grid: { left: 55, right: 25, top: 70, bottom: 40 },
             xAxis: {
                 type: 'category',
-                data: batterGames.map(g => new Date(g.Date).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' }))
+                data: batterGames.map(g => new Date(g.date).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' }))
             },
             yAxis: { type: 'value', name: '值' },
             series: [
@@ -191,11 +178,33 @@
             return;
         }
 
-        // 雷達圖配置 - 顯示PR值
-        if (batterPR && Object.keys(batterPR).length > 0) {
+        // 檢查是否有數據
+        if (!batterGames.length) {
+            batterRadarChart.setOption({
+                title: { 
+                    text: '無法顯示雷達圖', 
+                    left: 'center', 
+                    textStyle: { fontSize: 16, color: '#999' },
+                    subtext: '該球員在此賽季沒有打擊數據',
+                    subtextStyle: { fontSize: 12, color: '#999' }
+                },
+                graphic: {
+                    type: 'text',
+                    left: 'center',
+                    top: 'middle',
+                    style: {
+                        text: '⚠ 沒有比賽數據',
+                        fontSize: 16,
+                        fill: '#999',
+                        textAlign: 'center'
+                    }
+                }
+            });
+            return;
+        }
 
-            // 計算球員實際數值
-            const stats = calculateStats(batterGames);
+        // 雷達圖配置 - 顯示 PR值
+        if (batterPR && Object.keys(batterPR).length > 0) {
 
             batterRadarChart.setOption({
                 title: { 
@@ -209,21 +218,21 @@
                     trigger: 'item',
                     formatter: function(params) {
                         const statNames = [
-                            { en: 'AVG', zh: '打擊率', key: 'AVG' },
-                            { en: 'OBP', zh: '上壘率', key: 'OBP' },
-                            { en: 'SLG', zh: '長打率', key: 'SLG' },
-                            { en: 'OPS', zh: 'OPS', key: 'OPS' },
-                            { en: 'HR', zh: '全壘打', key: 'HR' },
-                            { en: 'RBI', zh: '打點', key: 'RBI' },
-                            { en: 'SO', zh: '三振', key: 'SO' },
-                            { en: 'BB', zh: '保送', key: 'BB' }
+                            { en: 'AVG', zh: '打擊率', key: 'avg' },
+                            { en: 'OBP', zh: '上壘率', key: 'obp' },
+                            { en: 'SLG', zh: '長打率', key: 'slg' },
+                            { en: 'OPS', zh: 'OPS', key: 'ops' },
+                            { en: 'HR', zh: '全壘打', key: 'hr' },
+                            { en: 'RBI', zh: '打點', key: 'rbi' },
+                            { en: 'SO', zh: '三振', key: 'so' },
+                            { en: 'BB', zh: '保送', key: 'bb' }
                         ];
 
                         if (params.name === '球員PR值') {
                             let result = '<strong>球員能力 PR值</strong><br/>';
                             statNames.forEach((stat) => {
-                                const prValue = batterPR[stat.key] || 0;
-                                const actualValue = stats?.[stat.key] || 0;
+                                const prValue = batterPR[stat.en] || 0;
+                                const actualValue = batterRadarStats[stat.key] || 0;
                                 const formatValue = (stat.en === 'HR' || stat.en === 'RBI' || stat.en === 'SO' || stat.en === 'BB') 
                                     ? actualValue.toFixed(0) 
                                     : actualValue.toFixed(3);
@@ -233,8 +242,8 @@
                         } else if (params.name === '隊伍平均') {
                             let result = '<strong>隊伍平均</strong><br/>';
                             statNames.forEach((stat) => {
-                                const avgValue = batterTeamAvg[stat.key] || 0;
-                                const prValue = batterTeamPR?.[stat.key] || 50;
+                                const avgValue = batterTeamAvg[stat.en] || 0;
+                                const prValue = batterTeamPR?.[stat.en] || 50;
                                 const formatValue = (stat.en === 'HR' || stat.en === 'RBI' || stat.en === 'SO' || stat.en === 'BB') 
                                     ? avgValue.toFixed(0)
                                     : avgValue.toFixed(3);
@@ -244,7 +253,7 @@
                         } else {
                             let result = '<strong>賽季平均</strong><br/>';
                             statNames.forEach((stat) => {
-                                const avgValue = batterSeasonAvg[stat.key] || 0;
+                                const avgValue = batterSeasonAvg[stat.en] || 0;
                                 const formatValue = (stat.en === 'HR' || stat.en === 'RBI' || stat.en === 'SO' || stat.en === 'BB') 
                                     ? avgValue.toFixed(0)
                                     : avgValue.toFixed(3);
@@ -364,23 +373,29 @@
             return;
         }
 
-        // 累積統計
-        let cumulative = { IPOuts: 0, ER: 0, H: 0, BB: 0 };
-        const eraData = [];
-        const whipData = [];
-
-        pitcherGames.forEach(g => {
-            cumulative.IPOuts += g.IPOuts || 0;
-            cumulative.ER += g.ER || 0;
-            cumulative.H += g.H || 0;
-            cumulative.BB += g.BB || 0;
-
-            const era = cumulative.IPOuts > 0 ? (cumulative.ER * 27 / cumulative.IPOuts) : 0;
-            const whip = cumulative.IPOuts > 0 ? ((cumulative.H + cumulative.BB) * 3 / cumulative.IPOuts) : 0;
-            
-            eraData.push(+era.toFixed(2));
-            whipData.push(+whip.toFixed(2));
-        });
+        if (!pitcherGames.length) {
+            pitcherLineChart.setOption({
+                title: { 
+                    text: '無法顯示折線圖', 
+                    left: 'center', 
+                    textStyle: { fontSize: 16, color: '#999' },
+                    subtext: '該球員在此賽季沒有投球數據',
+                    subtextStyle: { fontSize: 12, color: '#999' }
+                },
+                graphic: {
+                    type: 'text',
+                    left: 'center',
+                    top: 'middle',
+                    style: {
+                        text: '⚠ 沒有比賽數據',
+                        fontSize: 16,
+                        fill: '#999',
+                        textAlign: 'center'
+                    }
+                }
+            });
+            return;
+        }
 
         // 折線圖配置
         pitcherLineChart.setOption({
@@ -390,7 +405,7 @@
             grid: { left: 55, right: 25, top: 70, bottom: 40 },
             xAxis: {
                 type: 'category',
-                data: pitcherGames.map(g => new Date(g.Date).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' }))
+                data: pitcherGames.map(g => new Date(g.date).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' }))
             },
             yAxis: { type: 'value', name: '值' },
             series: [
@@ -398,14 +413,14 @@
                     name: '累積ERA',
                     type: 'line',
                     smooth: true,
-                    data: eraData,
+                    data: pitcherGames.map(g => +g.era.toFixed(2)),
                     areaStyle: { opacity: 0.1 }
                 },
                 {
                     name: '累積WHIP',
                     type: 'line',
                     smooth: true,
-                    data: whipData,
+                    data: pitcherGames.map(g => +g.whip.toFixed(2)),
                     areaStyle: { opacity: 0.1 }
                 }
             ]
@@ -418,34 +433,33 @@
             return;
         }
 
-        // 計算投手統計數據
-        function calculatePitcherStats(games) {
-            if (!games || games.length === 0) return null;
-
-            const totalIPOuts = games.reduce((sum, g) => sum + (g.IPOuts || 0), 0);
-            const totalER = games.reduce((sum, g) => sum + (g.ER || 0), 0);
-            const totalH = games.reduce((sum, g) => sum + (g.H || 0), 0);
-            const totalBB = games.reduce((sum, g) => sum + (g.BB || 0), 0);
-            const totalSO = games.reduce((sum, g) => sum + (g.SO || 0), 0);
-            const totalHR = games.reduce((sum, g) => sum + (g.HR || 0), 0);
-            const totalBF = games.reduce((sum, g) => sum + (g.BF || 0), 0);
-
-            const ERA = totalIPOuts > 0 ? (totalER * 27 / totalIPOuts) : 0;
-            const WHIP = totalIPOuts > 0 ? ((totalH + totalBB) * 3 / totalIPOuts) : 0;
-            const K9 = totalIPOuts > 0 ? (totalSO * 27 / totalIPOuts) : 0;
-            const BB9 = totalIPOuts > 0 ? (totalBB * 27 / totalIPOuts) : 0;
-            const KBB = totalBB > 0 ? (totalSO / totalBB) : totalSO;
-            const opponentAB = totalBF - totalBB - (games.reduce((sum, g) => sum + (g.HBP || 0), 0));
-            const BAA = opponentAB > 0 ? (totalH / opponentAB) : 0;
-
-            return { ERA, WHIP, K9, BB9, KBB, BAA, SO: totalSO, BB: totalBB };
+        // 檢查是否有數據
+        if (!pitcherGames.length) {
+            pitcherRadarChart.setOption({
+                title: { 
+                    text: '無法顯示雷達圖', 
+                    left: 'center', 
+                    textStyle: { fontSize: 16, color: '#999' },
+                    subtext: '該球員在此賽季沒有投球數據',
+                    subtextStyle: { fontSize: 12, color: '#999' }
+                },
+                graphic: {
+                    type: 'text',
+                    left: 'center',
+                    top: 'middle',
+                    style: {
+                        text: '⚠ 沒有比賽數據',
+                        fontSize: 16,
+                        fill: '#999',
+                        textAlign: 'center'
+                    }
+                }
+            });
+            return;
         }
 
-        // 雷達圖配置 - 顯示PR值
+        // 雷達圖配置 - 顯示 PR值
         if (pitcherPR && Object.keys(pitcherPR).length > 0) {
-
-            // 計算投手實際數值
-            const stats = calculatePitcherStats(pitcherGames);
             
             pitcherRadarChart.setOption({
                 title: { 
@@ -459,20 +473,20 @@
                     trigger: 'item',
                     formatter: function(params) {
                         const statNames = [
-                            { en: 'ERA', zh: '防禦率', key: 'ERA' },
-                            { en: 'WHIP', zh: 'WHIP', key: 'WHIP' },
-                            { en: 'K/9', zh: '每九局三振率', key: 'K9' },
-                            { en: 'BB/9', zh: '每九局保送率', key: 'BB9' },
-                            { en: 'K/BB', zh: '三振保送比', key: 'KBBRatio' },
-                            { en: 'BAA', zh: '被打擊率', key: 'BAA' },
-                            { en: 'SO', zh: '三振數', key: 'SO' }
+                            { en: 'ERA', zh: '防禦率', key: 'era' },
+                            { en: 'WHIP', zh: 'WHIP', key: 'whip' },
+                            { en: 'K/9', zh: '每九局三振率', key: 'k9' },
+                            { en: 'BB/9', zh: '每九局保送率', key: 'bb9' },
+                            { en: 'K/BB', zh: '三振保送比', key: 'kbb' },
+                            { en: 'BAA', zh: '被打擊率', key: 'baa' },
+                            { en: 'SO', zh: '三振數', key: 'so' }
                         ];
 
                         if (params.name === '投手PR值') {
                             let result = '<strong>投手能力 PR值</strong><br/>';
                             statNames.forEach((stat) => {
-                                const prValue = pitcherPR[stat.key] || 50;
-                                const actualValue = stats?.[stat.key] || 0;
+                                const prValue = pitcherPR[stat.en] || 50;
+                                const actualValue = pitcherRadarStats[stat.key] || 0;
                                 const formatValue = stat.en === 'SO' 
                                     ? actualValue.toFixed(0) 
                                     : actualValue.toFixed(2);
@@ -482,8 +496,8 @@
                         } else if (params.name === '隊伍平均') {
                             let result = '<strong>隊伍平均</strong><br/>';
                             statNames.forEach((stat) => {
-                                const avgValue = pitcherTeamAvg[stat.key] || 0;
-                                const prValue = pitcherTeamPR?.[stat.key] || 50;
+                                const avgValue = pitcherTeamAvg[stat.en] || 0;
+                                const prValue = pitcherTeamPR?.[stat.en] || 50;
                                 const formatValue = stat.en === 'SO' 
                                     ? avgValue.toFixed(0)
                                     : avgValue.toFixed(2);
@@ -493,7 +507,7 @@
                         } else {
                             let result = '<strong>賽季平均</strong><br/>';
                             statNames.forEach((stat) => {
-                                const avgValue = pitcherSeasonAvg[stat.key] || 0;
+                                const avgValue = pitcherSeasonAvg[stat.en] || 0;
                                 const formatValue = stat.en === 'SO' 
                                     ? avgValue.toFixed(0)
                                     : avgValue.toFixed(2);

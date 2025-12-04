@@ -236,6 +236,10 @@ class Program
                 l INTEGER NOT NULL,
                 era REAL NOT NULL,
                 whip REAL NOT NULL,
+                k9 REAL NOT NULL,
+                bb9 REAL NOT NULL,
+                kbbRatio REAL NOT NULL,
+                baa REAL NOT NULL,
                 updatedAt TEXT NOT NULL
             );
             CREATE UNIQUE INDEX IF NOT EXISTS IX_PitchingRankingCache_SeasonId_PlayerId 
@@ -783,6 +787,12 @@ class Program
 
         // 依逐場事實表重建球隊賽季匯總快取
         RebuildTeamSeasonRankingCache(conn);
+
+        // 重建打者排行榜快取
+        RebuildBattingRankingCache(conn);
+
+        // 重建投手排行榜快取
+        RebuildPitchingRankingCache(conn);
     }
 
     /// <summary>
@@ -1014,13 +1024,82 @@ class Program
             )
             UPDATE tblTeamSeasonRankingCache AS t
             SET rank = (SELECT rnk FROM ranked WHERE ranked.seasonId = t.seasonId AND ranked.teamId = t.teamId);
+
+            -- 寫入 seasonId='ALL' 的紀錄（歷史累計統計）
+            INSERT INTO tblTeamSeasonRankingCache(
+                seasonId, teamId, teamName,
+                rank, gamesPlayed, wins, losses,
+                runsScored, runsAllowed,
+                pa, ab, h, twoB, threeB, hr, bb, so, hbp, sf, sb, cs,
+                ipOuts, er, hitsAllowed, bbAllowed, soPitching, hrAllowed,
+                winPct, avg, obp, slg, ops, era, fip, runDiff, updatedAt
+            )
+            SELECT
+                'ALL' as seasonId,
+                tgs.teamId,
+                MAX(tgs.teamName) as teamName,
+                0 as rank,
+                COUNT(*) as gamesPlayed,
+                SUM(CASE WHEN tgs.teamScore > tgs.opponentScore THEN 1 ELSE 0 END) as wins,
+                SUM(CASE WHEN tgs.teamScore < tgs.opponentScore THEN 1 ELSE 0 END) as losses,
+                SUM(tgs.teamScore) as runsScored,
+                SUM(tgs.opponentScore) as runsAllowed,
+                SUM(tgs.pa) as pa,
+                SUM(tgs.ab) as ab,
+                SUM(tgs.h) as h,
+                SUM(tgs.twoB) as twoB,
+                SUM(tgs.threeB) as threeB,
+                SUM(tgs.hr) as hr,
+                SUM(tgs.bb) as bb,
+                SUM(tgs.so) as so,
+                SUM(tgs.hbp) as hbp,
+                SUM(tgs.sf) as sf,
+                SUM(tgs.sb) as sb,
+                SUM(tgs.cs) as cs,
+                SUM(tgs.ipOuts) as ipOuts,
+                SUM(tgs.er) as er,
+                SUM(tgs.hitsAllowed) as hitsAllowed,
+                SUM(tgs.bbAllowed) as bbAllowed,
+                SUM(tgs.soPitching) as soPitching,
+                SUM(tgs.hrAllowed) as hrAllowed,
+                CASE WHEN COUNT(*) > 0 THEN CAST(SUM(CASE WHEN tgs.teamScore > tgs.opponentScore THEN 1 ELSE 0 END) AS REAL) / COUNT(*) ELSE 0 END as winPct,
+                CASE WHEN SUM(tgs.ab) > 0 THEN CAST(SUM(tgs.h) AS REAL) / SUM(tgs.ab) ELSE 0 END as avg,
+                CASE WHEN (SUM(tgs.ab) + SUM(tgs.bb) + SUM(tgs.hbp) + SUM(tgs.sf)) > 0
+                     THEN CAST((SUM(tgs.h) + SUM(tgs.bb) + SUM(tgs.hbp)) AS REAL) / (SUM(tgs.ab) + SUM(tgs.bb) + SUM(tgs.hbp) + SUM(tgs.sf))
+                     ELSE 0 END as obp,
+                CASE WHEN SUM(tgs.ab) > 0
+                     THEN CAST((SUM(tgs.h) - (SUM(tgs.twoB)+SUM(tgs.threeB)+SUM(tgs.hr)) + 2*SUM(tgs.twoB) + 3*SUM(tgs.threeB) + 4*SUM(tgs.hr)) AS REAL) / SUM(tgs.ab)
+                     ELSE 0 END as slg,
+                0 as ops,
+                CASE WHEN SUM(tgs.ipOuts) > 0 THEN 9.0 * CAST(SUM(tgs.er) AS REAL) / (CAST(SUM(tgs.ipOuts) AS REAL) / 3.0) ELSE 0 END as era,
+                NULL as fip,
+                SUM(tgs.teamScore) - SUM(tgs.opponentScore) as runDiff,
+                strftime('%Y-%m-%dT%H:%M:%SZ','now') as updatedAt
+            FROM tblTeamGameStats tgs
+            GROUP BY tgs.teamId;
+
+            -- 更新 ALL 季的 OPS
+            UPDATE tblTeamSeasonRankingCache
+            SET ops = obp + slg
+            WHERE seasonId = 'ALL';
+
+            -- 計算 ALL 季的 rank
+            WITH ranked_all AS (
+                SELECT teamId,
+                       ROW_NUMBER() OVER (ORDER BY winPct DESC, runDiff DESC) AS rnk
+                FROM tblTeamSeasonRankingCache
+                WHERE seasonId = 'ALL'
+            )
+            UPDATE tblTeamSeasonRankingCache AS t
+            SET rank = (SELECT rnk FROM ranked_all WHERE ranked_all.teamId = t.teamId)
+            WHERE t.seasonId = 'ALL';
         ";
 
         using var cmd = conn.CreateCommand();
         cmd.CommandText = ddl;
         cmd.ExecuteNonQuery();
 
-        Console.WriteLine("[OK] Rebuilt tblTeamSeasonRankingCache from tblTeamGameStats.");
+        Console.WriteLine("[OK] Rebuilt tblTeamSeasonRankingCache from tblTeamGameStats with 'ALL' season records.");
     }
 
     /// <summary>
@@ -2478,5 +2557,243 @@ class Program
 
             return null;
         }
+    }
+
+    /// <summary>
+    /// 從 tblBatterBox 聚合重建 tblBattingRankingCache（按賽季）
+    /// </summary>
+    private static void RebuildBattingRankingCache(SqliteConnection conn)
+    {
+        var ddl = @"
+            -- 先清掉舊資料
+            DELETE FROM tblBattingRankingCache;
+
+            -- 從 tblBatterBox 聚合打者數據
+            INSERT INTO tblBattingRankingCache(
+                seasonId, playerId, playerName, rank,
+                games, pa, ab, h, twoB, threeB, hr, rbi, r, so, bb, hbp, sf, sb,
+                avg, obp, slg, ops, updatedAt
+            )
+            SELECT
+                bb.seasonId,
+                bb.playerId,
+                COALESCE(b.playerName, bb.playerId) as playerName,
+                0 as rank, -- 稍後更新
+                COUNT(DISTINCT bb.gameSeq) as games,
+                SUM(bb.PA) as pa,
+                SUM(bb.AB) as ab,
+                SUM(bb.H) as h,
+                SUM(bb.[2B]) as twoB,
+                SUM(bb.[3B]) as threeB,
+                SUM(bb.HR) as hr,
+                SUM(bb.RBI) as rbi,
+                SUM(bb.R) as r,
+                SUM(bb.SO) as so,
+                SUM(bb.BB) as bb,
+                SUM(bb.HBP) as hbp,
+                SUM(bb.SF) as sf,
+                SUM(bb.SB) as sb,
+                -- AVG = H / AB
+                CASE WHEN SUM(bb.AB) > 0 THEN CAST(SUM(bb.H) AS REAL) / SUM(bb.AB) ELSE 0 END as avg,
+                -- OBP = (H + BB + HBP) / (AB + BB + HBP + SF)
+                CASE WHEN (SUM(bb.AB) + SUM(bb.BB) + SUM(bb.HBP) + SUM(bb.SF)) > 0
+                     THEN CAST((SUM(bb.H) + SUM(bb.BB) + SUM(bb.HBP)) AS REAL) / (SUM(bb.AB) + SUM(bb.BB) + SUM(bb.HBP) + SUM(bb.SF))
+                     ELSE 0 END as obp,
+                -- SLG = TotalBases / AB; TotalBases = 1B + 2*2B + 3*3B + 4*HR; 1B = H - (2B+3B+HR)
+                CASE WHEN SUM(bb.AB) > 0
+                     THEN CAST((SUM(bb.H) - (SUM(bb.[2B]) + SUM(bb.[3B]) + SUM(bb.HR)) + 2*SUM(bb.[2B]) + 3*SUM(bb.[3B]) + 4*SUM(bb.HR)) AS REAL) / SUM(bb.AB)
+                     ELSE 0 END as slg,
+                0 as ops, -- 稍後更新
+                strftime('%Y-%m-%dT%H:%M:%SZ','now') as updatedAt
+            FROM tblBatterBox bb
+            LEFT JOIN tblBatter b ON bb.playerId = b.playerId
+            WHERE bb.playerId IS NOT NULL AND bb.playerId != ''
+            GROUP BY bb.seasonId, bb.playerId;
+
+            -- 更新 OPS = OBP + SLG
+            UPDATE tblBattingRankingCache
+            SET ops = obp + slg;
+
+            -- 依 OPS 排序計算 rank（同季內）
+            WITH ranked AS (
+                SELECT seasonId, playerId,
+                       ROW_NUMBER() OVER (PARTITION BY seasonId ORDER BY ops DESC, avg DESC) AS rnk
+                FROM tblBattingRankingCache
+            )
+            UPDATE tblBattingRankingCache AS t
+            SET rank = (SELECT rnk FROM ranked WHERE ranked.seasonId = t.seasonId AND ranked.playerId = t.playerId);
+
+            -- 寫入 seasonId='ALL' 的歷史累計統計
+            INSERT INTO tblBattingRankingCache(
+                seasonId, playerId, playerName, rank,
+                games, pa, ab, h, twoB, threeB, hr, rbi, r, so, bb, hbp, sf, sb,
+                avg, obp, slg, ops, updatedAt
+            )
+            SELECT
+                'ALL' as seasonId,
+                bb.playerId,
+                COALESCE(b.playerName, bb.playerId) as playerName,
+                0 as rank,
+                COUNT(DISTINCT bb.seasonId || '-' || bb.gameSeq) as games,
+                SUM(bb.PA) as pa,
+                SUM(bb.AB) as ab,
+                SUM(bb.H) as h,
+                SUM(bb.[2B]) as twoB,
+                SUM(bb.[3B]) as threeB,
+                SUM(bb.HR) as hr,
+                SUM(bb.RBI) as rbi,
+                SUM(bb.R) as r,
+                SUM(bb.SO) as so,
+                SUM(bb.BB) as bb,
+                SUM(bb.HBP) as hbp,
+                SUM(bb.SF) as sf,
+                SUM(bb.SB) as sb,
+                CASE WHEN SUM(bb.AB) > 0 THEN CAST(SUM(bb.H) AS REAL) / SUM(bb.AB) ELSE 0 END as avg,
+                CASE WHEN (SUM(bb.AB) + SUM(bb.BB) + SUM(bb.HBP) + SUM(bb.SF)) > 0
+                     THEN CAST((SUM(bb.H) + SUM(bb.BB) + SUM(bb.HBP)) AS REAL) / (SUM(bb.AB) + SUM(bb.BB) + SUM(bb.HBP) + SUM(bb.SF))
+                     ELSE 0 END as obp,
+                CASE WHEN SUM(bb.AB) > 0
+                     THEN CAST((SUM(bb.H) - (SUM(bb.[2B]) + SUM(bb.[3B]) + SUM(bb.HR)) + 2*SUM(bb.[2B]) + 3*SUM(bb.[3B]) + 4*SUM(bb.HR)) AS REAL) / SUM(bb.AB)
+                     ELSE 0 END as slg,
+                0 as ops,
+                strftime('%Y-%m-%dT%H:%M:%SZ','now') as updatedAt
+            FROM tblBatterBox bb
+            LEFT JOIN tblBatter b ON bb.playerId = b.playerId
+            WHERE bb.playerId IS NOT NULL AND bb.playerId != ''
+            GROUP BY bb.playerId;
+
+            -- 更新 ALL 季的 OPS
+            UPDATE tblBattingRankingCache
+            SET ops = obp + slg
+            WHERE seasonId = 'ALL';
+
+            -- 計算 ALL 季的 rank
+            WITH ranked_all AS (
+                SELECT playerId,
+                       ROW_NUMBER() OVER (ORDER BY ops DESC, avg DESC) AS rnk
+                FROM tblBattingRankingCache
+                WHERE seasonId = 'ALL'
+            )
+            UPDATE tblBattingRankingCache AS t
+            SET rank = (SELECT rnk FROM ranked_all WHERE ranked_all.playerId = t.playerId)
+            WHERE t.seasonId = 'ALL';
+        ";
+
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = ddl;
+        cmd.ExecuteNonQuery();
+
+        Console.WriteLine("[OK] Rebuilt tblBattingRankingCache from tblBatterBox with 'ALL' season records.");
+    }
+
+    /// <summary>
+    /// 從 tblPitcherBox 聚合重建 tblPitchingRankingCache（按賽季）
+    /// </summary>
+    private static void RebuildPitchingRankingCache(SqliteConnection conn)
+    {
+        var ddl = @"
+            -- 先清掉舊資料
+            DELETE FROM tblPitchingRankingCache;
+
+            -- 從 tblPitcherBox 聚合投手數據
+            INSERT INTO tblPitchingRankingCache(
+                seasonId, playerId, playerName, rank,
+                games, ip, ipOuts, h, hr, bb, so, r, er, w, l,
+                era, whip, k9, bb9, kbbRatio, baa, updatedAt
+            )
+            SELECT
+                pb.seasonId,
+                pb.playerId,
+                COALESCE(p.playerName, pb.playerId) as playerName,
+                0 as rank, -- 稍後更新
+                COUNT(DISTINCT pb.gameSeq) as games,
+                CAST(SUM(pb.IPOuts) AS REAL) / 3.0 as ip,
+                SUM(pb.IPOuts) as ipOuts,
+                SUM(pb.H) as h,
+                SUM(pb.HR) as hr,
+                SUM(pb.BB) as bb,
+                SUM(pb.SO) as so,
+                SUM(pb.R) as r,
+                SUM(pb.ER) as er,
+                0 as w, -- 勝場數需從比賽結果計算，這裡先設為 0
+                0 as l, -- 敗場數需從比賽結果計算，這裡先設為 0
+                -- ERA = 9 * ER / IP
+                CASE WHEN SUM(pb.IPOuts) > 0 THEN 9.0 * CAST(SUM(pb.ER) AS REAL) / (CAST(SUM(pb.IPOuts) AS REAL) / 3.0) ELSE 0 END as era,
+                -- WHIP = (H + BB) / IP
+                CASE WHEN SUM(pb.IPOuts) > 0 THEN CAST((SUM(pb.H) + SUM(pb.BB)) AS REAL) / (CAST(SUM(pb.IPOuts) AS REAL) / 3.0) ELSE 0 END as whip,
+                -- K9 = SO * 9 / IP
+                CASE WHEN SUM(pb.IPOuts) > 0 THEN 9.0 * CAST(SUM(pb.SO) AS REAL) / (CAST(SUM(pb.IPOuts) AS REAL) / 3.0) ELSE 0 END as k9,
+                -- BB9 = BB * 9 / IP
+                CASE WHEN SUM(pb.IPOuts) > 0 THEN 9.0 * CAST(SUM(pb.BB) AS REAL) / (CAST(SUM(pb.IPOuts) AS REAL) / 3.0) ELSE 0 END as bb9,
+                -- K/BB Ratio = SO / BB
+                CASE WHEN SUM(pb.BB) > 0 THEN CAST(SUM(pb.SO) AS REAL) / SUM(pb.BB) ELSE 0 END as kbbRatio,
+                -- BAA (被打擊率) = H / BF (面對打席)
+                CASE WHEN SUM(pb.BF) > 0 THEN CAST(SUM(pb.H) AS REAL) / SUM(pb.BF) ELSE 0 END as baa,
+                strftime('%Y-%m-%dT%H:%M:%SZ','now') as updatedAt
+            FROM tblPitcherBox pb
+            LEFT JOIN tblPitcher p ON pb.playerId = p.playerId
+            WHERE pb.playerId IS NOT NULL AND pb.playerId != ''
+            GROUP BY pb.seasonId, pb.playerId;
+
+            -- 依 ERA 排序計算 rank（同季內，ERA 越低越好）
+            WITH ranked AS (
+                SELECT seasonId, playerId,
+                       ROW_NUMBER() OVER (PARTITION BY seasonId ORDER BY era ASC, whip ASC) AS rnk
+                FROM tblPitchingRankingCache
+            )
+            UPDATE tblPitchingRankingCache AS t
+            SET rank = (SELECT rnk FROM ranked WHERE ranked.seasonId = t.seasonId AND ranked.playerId = t.playerId);
+
+            -- 寫入 seasonId='ALL' 的歷史累計統計
+            INSERT INTO tblPitchingRankingCache(
+                seasonId, playerId, playerName, rank,
+                games, ip, ipOuts, h, hr, bb, so, r, er, w, l,
+                era, whip, k9, bb9, kbbRatio, baa, updatedAt
+            )
+            SELECT
+                'ALL' as seasonId,
+                pb.playerId,
+                COALESCE(p.playerName, pb.playerId) as playerName,
+                0 as rank,
+                COUNT(DISTINCT pb.seasonId || '-' || pb.gameSeq) as games,
+                CAST(SUM(pb.IPOuts) AS REAL) / 3.0 as ip,
+                SUM(pb.IPOuts) as ipOuts,
+                SUM(pb.H) as h,
+                SUM(pb.HR) as hr,
+                SUM(pb.BB) as bb,
+                SUM(pb.SO) as so,
+                SUM(pb.R) as r,
+                SUM(pb.ER) as er,
+                0 as w,
+                0 as l,
+                CASE WHEN SUM(pb.IPOuts) > 0 THEN 9.0 * CAST(SUM(pb.ER) AS REAL) / (CAST(SUM(pb.IPOuts) AS REAL) / 3.0) ELSE 0 END as era,
+                CASE WHEN SUM(pb.IPOuts) > 0 THEN CAST((SUM(pb.H) + SUM(pb.BB)) AS REAL) / (CAST(SUM(pb.IPOuts) AS REAL) / 3.0) ELSE 0 END as whip,
+                CASE WHEN SUM(pb.IPOuts) > 0 THEN 9.0 * CAST(SUM(pb.SO) AS REAL) / (CAST(SUM(pb.IPOuts) AS REAL) / 3.0) ELSE 0 END as k9,
+                CASE WHEN SUM(pb.IPOuts) > 0 THEN 9.0 * CAST(SUM(pb.BB) AS REAL) / (CAST(SUM(pb.IPOuts) AS REAL) / 3.0) ELSE 0 END as bb9,
+                CASE WHEN SUM(pb.BB) > 0 THEN CAST(SUM(pb.SO) AS REAL) / SUM(pb.BB) ELSE 0 END as kbbRatio,
+                CASE WHEN SUM(pb.BF) > 0 THEN CAST(SUM(pb.H) AS REAL) / SUM(pb.BF) ELSE 0 END as baa,
+                strftime('%Y-%m-%dT%H:%M:%SZ','now') as updatedAt
+            FROM tblPitcherBox pb
+            LEFT JOIN tblPitcher p ON pb.playerId = p.playerId
+            WHERE pb.playerId IS NOT NULL AND pb.playerId != ''
+            GROUP BY pb.playerId;
+
+            -- 計算 ALL 季的 rank
+            WITH ranked_all AS (
+                SELECT playerId,
+                       ROW_NUMBER() OVER (ORDER BY era ASC, whip ASC) AS rnk
+                FROM tblPitchingRankingCache
+                WHERE seasonId = 'ALL'
+            )
+            UPDATE tblPitchingRankingCache AS t
+            SET rank = (SELECT rnk FROM ranked_all WHERE ranked_all.playerId = t.playerId)
+            WHERE t.seasonId = 'ALL';
+        ";
+
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = ddl;
+        cmd.ExecuteNonQuery();
+
+        Console.WriteLine("[OK] Rebuilt tblPitchingRankingCache from tblPitcherBox with 'ALL' season records.");
     }
 }

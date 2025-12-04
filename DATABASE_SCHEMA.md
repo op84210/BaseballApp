@@ -17,10 +17,15 @@
     - [成績資料](#成績資料)
       - [tblBatterBox - 打者成績](#tblbatterbox---打者成績)
       - [tblPitcherBox - 投手成績](#tblpitcherbox---投手成績)
+      - [tblTeamGameStats - 球隊逐場事實表](#tblteamgamestats---球隊逐場事實表)
     - [打席相關](#打席相關)
       - [tblPA - 打席資料](#tblpa---打席資料)
       - [tblEvent - 打席內事件](#tblevent---打席內事件)
       - [tblRunner - 跑者資料](#tblrunner---跑者資料)
+    - [快取資料](#快取資料)
+      - [tblBattingRankingCache - 打者排行榜快取](#tblbattingrankingcache---打者排行榜快取)
+      - [tblPitchingRankingCache - 投手排行榜快取](#tblpitchingrankingcache---投手排行榜快取)
+      - [tblTeamSeasonRankingCache - 球隊賽季匯總/排行榜快取](#tblteamseasonrankingcache---球隊賽季匯總排行榜快取)
     - [代碼資料](#代碼資料)
       - [tblCodeBases - 壘包狀況代碼](#tblcodebases---壘包狀況代碼)
       - [tblCodePitchCode - 投球結果代碼](#tblcodepitchcode---投球結果代碼)
@@ -175,6 +180,46 @@
 - `FOREIGN KEY (seasonId, gameSeq) REFERENCES tblGame(seasonId, seq)`
 - `FOREIGN KEY (playerId) REFERENCES tblPitcher(playerId)`
 
+#### tblTeamGameStats - 球隊逐場事實表
+
+| 欄位名稱 | 型別 | 約束 | 說明 | 備註 |
+|---------|------|------|------|------|
+| id | Integer | PK | 流水號 | 自動增加 |
+| seasonId | Text | | 賽季ID | |
+| gameId | Text | | 比賽ID | 唯一識別該場比賽 |
+| gameDate | Text | | 比賽日期 | ISO 8601 格式 |
+| teamId | Text | | 球隊ID | |
+| teamName | Text | | 球隊名稱 | |
+| opponentTeamId | Text | | 對手球隊ID | |
+| opponentTeamName | Text | | 對手球隊名稱 | |
+| isHome | Integer | | 是否為主場 | 1=主場, 0=客場 |
+| teamScore | Integer | | 球隊得分 | |
+| opponentScore | Integer | | 對手得分 | |
+| pa | Integer | | 打席 | |
+| ab | Integer | | 打數 | |
+| h | Integer | | 安打 | |
+| twoB | Integer | | 二壘安打 | |
+| threeB | Integer | | 三壘安打 | |
+| hr | Integer | | 全壘打 | |
+| bb | Integer | | 四壞 | |
+| so | Integer | | 三振 | |
+| hbp | Integer | | 觸身球 | |
+| sf | Integer | | 犧牲飛球 | |
+| sb | Integer | | 盜壘成功 | |
+| cs | Integer | | 盜壘失敗 | |
+| ipOuts | Integer | | 投球出局數 | |
+| er | Integer | | 責失分 | |
+| hitsAllowed | Integer | | 被安打數 | |
+| bbAllowed | Integer | | 被保送數 | |
+| soPitching | Integer | | 奪三振數 | |
+| hrAllowed | Integer | | 被全壘打數 | |
+| createdAt | Text | | 建立時間 | |
+
+唯一鍵：`UNIQUE(gameId, teamId)`  
+索引：
+- `IX_TeamGameStats_GameId_TeamId (gameId, teamId)`
+- `IX_TeamGameStats_Season_Team_Date (seasonId, teamId, gameDate)`
+
 ### 打席相關
 
 #### tblPA - 打席資料
@@ -261,6 +306,116 @@
 | isRBI | Boolean | | 是打者的打點 | |
 | isER | Boolean | | 是投手責失 | |
 | ERPitcherID | String | | 被算責失的投手 | 非責失為 null |
+
+### 快取資料
+
+#### tblBattingRankingCache - 打者排行榜快取
+
+| 欄位名稱 | 型別 | 約束 | 說明 | 備註 |
+|---------|------|------|------|------|
+| id | Integer | PK | 主鍵 | 自動增加 |
+| seasonId | Text | | 賽季ID | |
+| playerId | Text | | 球員ID | |
+| playerName | Text | | 球員名稱 | |
+| rank | Integer | | 排名 | |
+| games | Integer | | 出賽場數 | |
+| pa | Integer | | 打席數 | |
+| ab | Integer | | 打數 | |
+| h | Integer | | 安打數 | |
+| twoB | Integer | | 二壘安打 | |
+| threeB | Integer | | 三壘安打 | |
+| hr | Integer | | 全壘打數 | |
+| rbi | Integer | | 打點數 | |
+| r | Integer | | 得分數 | |
+| so | Integer | | 三振數 | |
+| bb | Integer | | 保送數 | |
+| hbp | Integer | | 觸身球數 | |
+| sf | Integer | | 犧牲飛球數 | |
+| sb | Integer | | 盜壘數 | |
+| avg | Real | | 打擊率 | |
+| obp | Real | | 上壘率 | |
+| slg | Real | | 長打率 | |
+| ops | Real | | OPS | |
+| updatedAt | Text | | 更新時間 | |
+
+唯一索引：`IX_BattingRankingCache_SeasonId_PlayerId (seasonId, playerId)`  
+索引：`IX_BattingRankingCache_SeasonId_Rank (seasonId, rank)`
+
+#### tblPitchingRankingCache - 投手排行榜快取
+
+| 欄位名稱 | 型別 | 約束 | 說明 | 備註 |
+|---------|------|------|------|------|
+| id | Integer | PK | 主鍵 | 自動增加 |
+| seasonId | Text | | 賽季ID | |
+| playerId | Text | | 球員ID | |
+| playerName | Text | | 球員名稱 | |
+| rank | Integer | | 排名 | |
+| games | Integer | | 出賽場數 | |
+| ip | Real | | 投球局數（小數） | |
+| ipOuts | Integer | | 投球局數（出局數） | |
+| h | Integer | | 被安打數 | |
+| hr | Integer | | 被全壘打數 | |
+| bb | Integer | | 四壞球數 | |
+| so | Integer | | 三振數 | |
+| r | Integer | | 失分數 | |
+| er | Integer | | 自責分數 | |
+| w | Integer | | 勝場數 | |
+| l | Integer | | 敗場數 | |
+| era | Real | | 防禦率 | |
+| whip | Real | | 每局被上壘率 | |
+| k9 | Real | | 每九局三振率 | |
+| bb9 | Real | | 每九局保送率 | |
+| kbbRatio | Real | | 三振保送比 | |
+| baa | Real | | 被打擊率 | |
+| updatedAt | Text | | 更新時間 | |
+
+唯一索引：`IX_PitchingRankingCache_SeasonId_PlayerId (seasonId, playerId)`  
+索引：`IX_PitchingRankingCache_SeasonId_Rank (seasonId, rank)`
+
+#### tblTeamSeasonRankingCache - 球隊賽季匯總/排行榜快取
+
+| 欄位名稱 | 型別 | 約束 | 說明 | 備註 |
+|---------|------|------|------|------|
+| id | Integer | PK | 流水號 | 自動增加 |
+| seasonId | Text | | 賽季ID | |
+| teamId | Text | | 球隊ID | |
+| teamName | Text | | 球隊名稱 | |
+| rank | Integer | | 排名 | |
+| gamesPlayed | Integer | | 出賽場數 | |
+| wins | Integer | | 勝場數 | |
+| losses | Integer | | 敗場數 | |
+| runsScored | Integer | | 得分 | |
+| runsAllowed | Integer | | 失分 | |
+| pa | Integer | | 打席 | |
+| ab | Integer | | 打數 | |
+| h | Integer | | 安打 | |
+| twoB | Integer | | 二壘安打 | |
+| threeB | Integer | | 三壘安打 | |
+| hr | Integer | | 全壘打 | |
+| bb | Integer | | 保送 | |
+| so | Integer | | 三振 | |
+| hbp | Integer | | 觸身球 | |
+| sf | Integer | | 犧牲飛球 | |
+| sb | Integer | | 盜壘成功 | |
+| cs | Integer | | 盜壘失敗 | |
+| ipOuts | Integer | | 投球出局數 | |
+| er | Integer | | 責失分 | |
+| hitsAllowed | Integer | | 被安打數 | |
+| bbAllowed | Integer | | 被保送數 | |
+| soPitching | Integer | | 奪三振數 | |
+| hrAllowed | Integer | | 被全壘打數 | |
+| winPct | Real | | 勝率 | |
+| avg | Real | | 打擊率 | |
+| obp | Real | | 上壘率 | |
+| slg | Real | | 長打率 | |
+| ops | Real | | OPS | |
+| era | Real | | 防禦率 | |
+| fip | Real | | FIP (Fielding Independent Pitching) | 可為 NULL |
+| runDiff | Integer | | 得失分差 | |
+| updatedAt | Text | | 更新時間 | |
+
+唯一索引：`IX_TeamSeasonRanking_SeasonId_TeamId (seasonId, teamId)`  
+索引：`IX_TeamSeasonRanking_SeasonId_Rank (seasonId, rank)`
 
 ### 代碼資料
 

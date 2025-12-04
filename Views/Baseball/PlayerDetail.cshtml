@@ -366,6 +366,7 @@
                                 <th>日期</th>
                                 <th>賽季名稱</th>
                                 <th>場次</th>
+                                <th>對手</th>
                                 <th>打席</th>
                                 <th>安打</th>
                                 <th>全壘打</th>
@@ -381,6 +382,7 @@
                                     <td>@game.Date.ToString(format: "yyyy/MM/dd")</td>
                                     <td>@game.SeasonName</td>
                                     <td>G@(game.Seq)</td>
+                                    <td>@game.Opponent</td>
                                     <td>@game.PA</td>
                                     <td>@game.H</td>
                                     <td>@game.HR</td>
@@ -469,6 +471,7 @@
                                 <th>日期</th>
                                 <th>賽季名稱</th>
                                 <th>場次</th>
+                                <th>對手</th>
                                 <th>局數</th>
                                 <th>打席</th>
                                 <th>結果</th>
@@ -476,12 +479,13 @@
                             </tr>
                         </thead>
                         <tbody>
-                            @foreach (dynamic pa in Model.BatterDetail.Stats.BestPAs)
+                            @foreach (BestPA pa in Model.BatterDetail.Stats.BestPAs)
                             {
                                 <tr>
                                     <td>@pa.Date.ToString(format: "yyyy/MM/dd")</td>
                                     <td>@pa.SeasonName</td>
                                     <td>G@(pa.Seq)</td>
+                                    <td>@pa.Opponent</td>
                                     <td>@pa.Inning</td>
                                     <td>@pa.PASeq</td>
                                     <td>@pa.PAResult</td>

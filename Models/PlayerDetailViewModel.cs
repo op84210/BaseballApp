@@ -417,6 +417,11 @@ public class BestPA
     public int Seq { get; set; }
 
     /// <summary>
+    /// 對手
+    /// </summary>
+    public string Opponent { get; set; } = string.Empty;
+
+    /// <summary>
     /// 局數
     /// </summary>
     public int Inning { get; set; }

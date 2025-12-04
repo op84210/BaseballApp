@@ -3,23 +3,7 @@ namespace BaseballApp.Models;
 /// <summary>
 /// 球員資料_投手
 /// </summary>
-public class Pitcher
+public class Pitcher : Player
 {
-    /// <summary>
-    /// 球員ID
-    /// </summary>
-    public string PlayerId { get; set; } = string.Empty;
-
-    /// <summary>
-    /// 球員背號
-    /// </summary>
-    public string? PlayerNumber { get; set; }
-
-    /// <summary>
-    /// 球員名稱
-    /// </summary>
-    public string PlayerName { get; set; } = string.Empty;
-
-    // Navigation properties
-    public ICollection<PlayerTeam> PlayerTeams { get; set; } = new List<PlayerTeam>();
+    // 這裡可以加入投手特有的屬性和方法
 }

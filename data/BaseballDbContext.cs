@@ -257,9 +257,10 @@ public class BaseballDbContext : DbContext
                 .OnDelete(DeleteBehavior.Restrict);
 
             // 關聯關係：PitcherBox -> Pitcher
-            entity.HasOne(pb => pb.Player)
+            entity.HasOne(pb => pb.Pitcher)
                 .WithMany()
                 .HasForeignKey(pb => pb.PlayerId)
+                .HasPrincipalKey(p => p.PlayerId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
@@ -395,6 +396,10 @@ public class BaseballDbContext : DbContext
             entity.Property(e => e.L).HasColumnName("l");
             entity.Property(e => e.ERA).HasColumnName("era").HasColumnType("decimal(5,2)");
             entity.Property(e => e.WHIP).HasColumnName("whip").HasColumnType("decimal(5,2)");
+            entity.Property(e => e.K9).HasColumnName("k9").HasColumnType("decimal(5,2)");
+            entity.Property(e => e.BB9).HasColumnName("bb9").HasColumnType("decimal(5,2)");
+            entity.Property(e => e.KBBRatio).HasColumnName("kbbRatio").HasColumnType("decimal(5,2)");
+            entity.Property(e => e.BAA).HasColumnName("baa").HasColumnType("decimal(5,3)");
             entity.Property(e => e.UpdatedAt).HasColumnName("updatedAt");
 
             // 建立複合索引：seasonId + playerId

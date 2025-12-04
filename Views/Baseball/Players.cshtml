@@ -1,3 +1,7 @@
+@model BaseballApp.Models.PlayersViewModel
+@using System.Linq
+@using System.Collections.Generic
+
 @{
     ViewData["Title"] = "球員列表";
 }
@@ -9,27 +13,30 @@
     <div class="card mb-4">
         <div class="card-body">
             <form method="get" class="row g-3">
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <label class="form-label">賽季</label>
                     <select name="seasonId" class="form-select" onchange="this.form.submit()">
-                        <option value="ALL" selected="@(ViewBag.SeasonId == "ALL")">全部賽季</option>
-                        @foreach (var season in ViewBag.Seasons)
+                        @foreach (SelectListItem option in Model.SeasonOptions)
                         {
-                            <option value="@season.SeasonId" selected="@(season.SeasonId == ViewBag.SeasonId)">
-                                @season.SeasonName
-                            </option>
+                            <option value="@option.Value" selected="@option.Selected">@option.Text</option>
                         }
                     </select>
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <label class="form-label">球隊</label>
                     <select name="teamId" class="form-select" onchange="this.form.submit()">
-                        <option value="">全部球隊</option>
-                        @foreach (var team in ViewBag.Teams)
+                        @foreach (SelectListItem option in Model.TeamOptions)
                         {
-                            <option value="@team.TeamId" selected="@(team.TeamId == ViewBag.TeamId)">
-                                @team.TeamName
-                            </option>
+                            <option value="@option.Value" selected="@option.Selected">@option.Text</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">球員類型</label>
+                    <select name="playerType" class="form-select" onchange="this.form.submit()">
+                        @foreach (SelectListItem option in Model.PlayerTypeOptions)
+                        {
+                            <option value="@option.Value" selected="@(option.Value == Model.PlayerType)">@option.Text</option>
                         }
                     </select>
                 </div>
@@ -39,23 +46,46 @@
 
     <!-- 球員列表 -->
     <div class="row">
-        @foreach (var player in ViewBag.Batters)
+        @{
+            List<Player> playersToShow = Model.PlayerType switch
+            {
+                "pitcher" => Model.Pitchers.Cast<Player>().ToList(),
+                "batter" => Model.Batters.Cast<Player>().ToList(),
+                _ => Model.Batters.Concat(Model.Pitchers)
+                    .Cast<Player>()
+                    .DistinctBy(p => p.PlayerId)
+                    .ToList()
+            };
+        }
+
+        @if (playersToShow.Count == 0)
         {
-            <div class="col-md-3 mb-3">
-                <div class="card h-100">
-                    <div class="card-body">
-                        <h5 class="card-title">
-                            @if (!string.IsNullOrEmpty(player.PlayerNumber))
-                            {
-                                <span class="badge bg-secondary">@player.PlayerNumber</span>
-                            }
-                            @player.PlayerName
-                        </h5>
-                        <a href="@Url.Action("PlayerDetail", new { playerId = player.PlayerId, seasonId = ViewBag.SeasonId })" 
-                           class="btn btn-sm btn-primary">查看詳情</a>
-                    </div>
+            <div class="col-12">
+                <div class="alert alert-info">
+                    查無相符的球員資料
                 </div>
             </div>
+        }
+        else
+        {
+            @foreach (Player player in playersToShow)
+            {
+                <div class="col-md-3 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h5 class="card-title">
+                                @if (!string.IsNullOrEmpty(player.PlayerNumber))
+                                {
+                                    <span class="badge bg-secondary">@player.PlayerNumber</span>
+                                }
+                                @player.PlayerName
+                            </h5>
+                            <a href="@Url.Action("PlayerDetail", new { playerId = player.PlayerId, seasonId = Model.SeasonId })" 
+                               class="btn btn-sm btn-primary">查看詳情</a>
+                        </div>
+                    </div>
+                </div>
+            }
         }
     </div>
 </div>

@@ -92,5 +92,5 @@ public class PitcherBox
 
     // Navigation properties
     public Game? Game { get; set; }
-    public Pitcher? Player { get; set; }
+    public Pitcher? Pitcher { get; set; }
 }

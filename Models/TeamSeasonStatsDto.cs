@@ -25,7 +25,6 @@ public class TeamSeasonStatsQueryResult
     public double? Slg { get; set; }
     public double? Ops { get; set; }
     public double? Hr { get; set; }
-    public double? Rbi { get; set; }
     public double? So { get; set; }
     public double? Bb { get; set; }
 }
