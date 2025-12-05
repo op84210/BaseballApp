@@ -684,7 +684,7 @@ public class BaseballController : Controller
 
             // 檢查快取是否過期（超過 24 小時）
             var isCacheStale = await _rankingCacheService.IsCacheStaleAsync(vm.SeasonId, hoursThreshold: 24);
-            if (cachedRankings.Any() && !isCacheStale)
+            if (cachedRankings.Count != 0 && !isCacheStale)
             {
                 // 使用快取資料
                 vm.BattingRankings = cachedRankings.Take(50).ToList();
@@ -770,7 +770,7 @@ public class BaseballController : Controller
 
             // 檢查快取是否過期（超過 24 小時）
             var isCacheStale = await _rankingCacheService.IsCacheStaleAsync(vm.SeasonId, hoursThreshold: 24);
-            if (cachedRankings.Any() && !isCacheStale)
+            if (cachedRankings.Count != 0 && !isCacheStale)
             {
                 // 使用快取資料
                 vm.PitchingRankings = cachedRankings.Take(50).ToList();

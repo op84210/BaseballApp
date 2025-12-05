@@ -30,7 +30,7 @@ public class PlayerDataApiController : ControllerBase
     /// <returns>圖表數據</returns>
     [HttpGet("batter/{playerId}/chart")]
     public async Task<IActionResult> GetBatterChartData(
-        string playerId, 
+        string playerId,
         [FromQuery] string seasonId = "ALL")
     {
         try
@@ -49,17 +49,17 @@ public class PlayerDataApiController : ControllerBase
 
             // 建立打者比賽統計
             var gameStats = BuildBatterGameStats(paList.ToList(), seasonsDict);
-            if (!gameStats.Any())
+            if (gameStats.Count == 0)
             {
-                return Ok(CreateEmptyChartResponse());
+                return NotFound(new { error = "該球員在此賽季沒有打擊數據" });
             }
 
             // 建立圖表數據
             var chartData = BuildBatterChartData(gameStats);
-            
+
             // 計算雷達圖數據
             var radarStats = CalculateBatterRadarStats(gameStats);
-            
+
             // 計算百分位排名和聯盟中位數
             var allPlayerStats = await _rankingCacheService.GetBattingStatsFromCacheAsync(seasonId);
             var percentileRanks = CalculateBatterPercentiles(gameStats, allPlayerStats);
@@ -70,9 +70,15 @@ public class PlayerDataApiController : ControllerBase
                 .Where(pt => pt.IsActive)
                 .OrderByDescending(pt => pt.StartDate)
                 .FirstOrDefault();
-            
+
+            // 如果沒有球隊資料，顯示錯誤訊息
+            if (playerTeam == null)
+            {
+                return NotFound(new { error = "球員沒有有效的球隊資料" });
+            }
+
             // 計算球隊數據
-            var teamStatsResult = await CalculateTeamStats(seasonId, playerTeam, allPlayerStats);
+            var teamStatsResult = await CalculateTeamStats(seasonId, playerTeam.TeamId, allPlayerStats);
             var teamAverages = teamStatsResult.Item1;
             var teamPercentileRanks = teamStatsResult.Item2;
 
@@ -150,19 +156,41 @@ public class PlayerDataApiController : ControllerBase
             cum3B += game._3b;
             cumHR += game.hr;
 
-            var avg = cumAB > 0 ? Math.Round((decimal)cumH / cumAB, 3) : 0;
-            var obpDen = cumAB + cumBB + cumHBP + cumSF;
-            var obp = obpDen > 0 ? Math.Round((decimal)(cumH + cumBB + cumHBP) / obpDen, 3) : 0;
-            var totalBases = cum1B + cum2B * 2 + cum3B * 3 + cumHR * 4;
-            var slg = cumAB > 0 ? Math.Round((decimal)totalBases / cumAB, 3) : 0;
-            var ops = obp + slg;
+            // 累積數據
+            var cumulativeAVG = cumAB > 0 ? Math.Round((decimal)cumH / cumAB, 3) : 0;
+            var cumulativeOBPDen = cumAB + cumBB + cumHBP + cumSF;
+            var cumulativeOBP = cumulativeOBPDen > 0 ? Math.Round((decimal)(cumH + cumBB + cumHBP) / cumulativeOBPDen, 3) : 0;
+            var cumulativeTotalBases = cum1B + cum2B * 2 + cum3B * 3 + cumHR * 4;
+            var cumulativeSLG = cumAB > 0 ? Math.Round((decimal)cumulativeTotalBases / cumAB, 3) : 0;
+            var cumulativeOPS = cumulativeOBP + cumulativeSLG;
+
+            // 單場數據
+            var gameAB = (int)game.ab;
+            var gameH = (int)game.h;
+            var gameBB = (int)game.bb;
+            var gameHBP = (int)game.hbp;
+            var gameSF = (int)game.sf;
+            var game1B = (int)game._1b;
+            var game2B = (int)game._2b;
+            var game3B = (int)game._3b;
+            var gameHR = (int)game.hr;
+
+            var gameAVG = gameAB > 0 ? Math.Round((decimal)gameH / gameAB, 3) : 0;
+            var gameOBPDen = gameAB + gameBB + gameHBP + gameSF;
+            var gameOBP = gameOBPDen > 0 ? Math.Round((decimal)(gameH + gameBB + gameHBP) / gameOBPDen, 3) : 0;
+            var gameTotalBases = game1B + game2B * 2 + game3B * 3 + gameHR * 4;
+            var gameSLG = gameAB > 0 ? Math.Round((decimal)gameTotalBases / gameAB, 3) : 0;
+            var gameOPS = gameOBP + gameSLG;
 
             chartData.Add(new
             {
                 date = game.date,
                 seq = game.seq,
-                avgData = avg,
-                opsData = ops
+                avgData = cumulativeAVG,
+                opsData = cumulativeOPS,
+                gameAVG = gameAVG,
+                gameOPS = gameOPS,
+                ab = gameAB
             });
         }
 
@@ -196,7 +224,7 @@ public class PlayerDataApiController : ControllerBase
         var totalBases = total1B + total2B * 2 + total3B * 3 + totalHR * 4;
         var slg = totalAB > 0 ? (decimal)totalBases / totalAB : 0;
         var ops = obp + slg;
-        
+
         // 計算三振率、保送率和得分率（以打席數為分母）
         var kPct = totalPA > 0 ? Math.Round((decimal)totalSO / totalPA * 100, 1) : 0;
         var bbPct = totalPA > 0 ? Math.Round((decimal)totalBB / totalPA * 100, 1) : 0;
@@ -224,8 +252,8 @@ public class PlayerDataApiController : ControllerBase
     private Dictionary<string, decimal> CalculateBatterPercentiles(List<dynamic> gameStats, List<BattingRankingCache> allPlayerStats)
     {
         var percentileRanks = new Dictionary<string, decimal>();
-        
-        if (!allPlayerStats.Any())
+
+        if (allPlayerStats.Count == 0)
             return percentileRanks;
 
         int totalAB = gameStats.Sum(g => (int)g.ab);
@@ -248,7 +276,7 @@ public class PlayerDataApiController : ControllerBase
         var totalBases = total1B + total2B * 2 + total3B * 3 + totalHR * 4;
         var slg = totalAB > 0 ? (decimal)totalBases / totalAB : 0;
         var ops = obp + slg;
-        
+
         // 計算三振率、保送率和得分率（以打席數為分母）
         var kPct = totalPA > 0 ? (decimal)totalSO / totalPA : 0;
         var bbPct = totalPA > 0 ? (decimal)totalBB / totalPA : 0;
@@ -274,8 +302,8 @@ public class PlayerDataApiController : ControllerBase
     private Dictionary<string, decimal> CalculateLeagueMedianStats(List<BattingRankingCache> allPlayerStats)
     {
         var leagueMedianStats = new Dictionary<string, decimal>();
-        
-        if (!allPlayerStats.Any())
+
+        if (allPlayerStats.Count == 0)
             return leagueMedianStats;
 
         leagueMedianStats["AVG"] = CalculateMedian(allPlayerStats.Select(p => p.AVG).ToList());
@@ -298,17 +326,16 @@ public class PlayerDataApiController : ControllerBase
     /// <param name="allPlayerStats">所有球員的打擊排名緩存列表</param>
     /// <returns>球隊統計和球隊百分位排名字典</returns>
     private async Task<(Dictionary<string, decimal>, Dictionary<string, decimal>)> CalculateTeamStats(
-        string seasonId, 
-        PlayerTeam? playerTeam, 
+        string seasonId, string teamId,
         List<BattingRankingCache> allPlayerStats)
     {
         var teamAverages = new Dictionary<string, decimal>();
         var teamPercentileRanks = new Dictionary<string, decimal>();
 
-        if (playerTeam == null || !allPlayerStats.Any())
+        if (allPlayerStats.Count == 0)
             return (teamAverages, teamPercentileRanks);
 
-        var teamStats = await _rankingCacheService.GetTeamSeasonBattingStatsAsync(seasonId, playerTeam.TeamId);
+        var teamStats = await _rankingCacheService.GetTeamSeasonBattingStatsAsync(seasonId, teamId);
         if (teamStats == null)
             return (teamAverages, teamPercentileRanks);
 
@@ -365,7 +392,7 @@ public class PlayerDataApiController : ControllerBase
     /// <returns>圖表數據</returns>
     [HttpGet("pitcher/{playerId}/chart")]
     public async Task<IActionResult> GetPitcherChartData(
-        string playerId, 
+        string playerId,
         [FromQuery] string seasonId = "ALL")
     {
         try
@@ -384,17 +411,17 @@ public class PlayerDataApiController : ControllerBase
 
             // 建立投手比賽統計
             var gameStatsData = BuildPitcherGameStats(pitcherBoxes.ToList(), playerId);
-            if (!gameStatsData.Any())
+            if (gameStatsData.Count == 0)
             {
-                return Ok(CreateEmptyPitcherChartResponse());
+                return NotFound(new { error = "該投手在此賽季沒有投球數據" });
             }
 
             // 建立圖表數據
             var chartData = BuildPitcherChartData(gameStatsData);
-            
+
             // 計算雷達圖數據
             var radarStats = CalculatePitcherRadarStats(gameStatsData);
-            
+
             // 計算百分位排名和聯盟中位數
             var allPitcherStats = await _rankingCacheService.GetPitchingStatsFromCacheAsync(seasonId);
             var percentileRanks = CalculatePitcherPercentiles(gameStatsData, radarStats, allPitcherStats);
@@ -405,9 +432,14 @@ public class PlayerDataApiController : ControllerBase
                 .Where(pt => pt.IsActive)
                 .OrderByDescending(pt => pt.StartDate)
                 .FirstOrDefault();
-            
+
+            if (playerTeam == null)
+            {
+                return NotFound(new { error = "投手沒有有效的球隊資料" });
+            }
+
             // 計算球隊數據
-            var teamStatsResult = await CalculatePitcherTeamStats(seasonId, playerTeam, allPitcherStats, radarStats);
+            var teamStatsResult = await CalculatePitcherTeamStats(seasonId, playerTeam.TeamId, allPitcherStats);
             var teamAverages = teamStatsResult.Item1;
             var teamPercentileRanks = teamStatsResult.Item2;
 
@@ -478,14 +510,27 @@ public class PlayerDataApiController : ControllerBase
             cumH += game.h;
             cumBB += game.bb;
 
-            var era = cumIPOuts > 0 ? Math.Round((decimal)cumER * 27 / cumIPOuts, 2) : 0;
-            var whip = cumIPOuts > 0 ? Math.Round((decimal)(cumH + cumBB) * 3 / cumIPOuts, 2) : 0;
+            // 累積數據
+            var cumulativeERA = cumIPOuts > 0 ? Math.Round((decimal)cumER * 27 / cumIPOuts, 2) : 0;
+            var cumulativeWHIP = cumIPOuts > 0 ? Math.Round((decimal)(cumH + cumBB) * 3 / cumIPOuts, 2) : 0;
+
+            // 單場數據
+            var gameIPOuts = (int)game.ipOuts;
+            var gameER = (int)game.er;
+            var gameH = (int)game.h;
+            var gameBB = (int)game.bb;
+
+            var gameERA = gameIPOuts > 0 ? Math.Round((decimal)gameER * 27 / gameIPOuts, 2) : 0;
+            var gameWHIP = gameIPOuts > 0 ? Math.Round((decimal)(gameH + gameBB) * 3 / gameIPOuts, 2) : 0;
 
             chartData.Add(new
             {
                 date = game.date,
-                era = era,
-                whip = whip
+                era = cumulativeERA,
+                whip = cumulativeWHIP,
+                gameERA = gameERA,
+                gameWHIP = gameWHIP,
+                ipOuts = gameIPOuts
             });
         }
 
@@ -539,8 +584,8 @@ public class PlayerDataApiController : ControllerBase
     private Dictionary<string, decimal> CalculatePitcherPercentiles(List<dynamic> gameStatsData, dynamic radarStats, List<PitchingRankingCache> allPitcherStats)
     {
         var percentileRanks = new Dictionary<string, decimal>();
-        
-        if (!allPitcherStats.Any())
+
+        if (allPitcherStats.Count == 0)
             return percentileRanks;
 
         var eraPlayer = (decimal)radarStats.era;
@@ -571,8 +616,8 @@ public class PlayerDataApiController : ControllerBase
     private Dictionary<string, decimal> CalculatePitcherLeagueMedianStats(List<PitchingRankingCache> allPitcherStats)
     {
         var leagueMedianStats = new Dictionary<string, decimal>();
-        
-        if (!allPitcherStats.Any())
+
+        if (allPitcherStats.Count == 0)
             return leagueMedianStats;
 
         leagueMedianStats["ERA"] = CalculateMedian(allPitcherStats.Select(p => p.ERA).ToList());
@@ -592,24 +637,23 @@ public class PlayerDataApiController : ControllerBase
     /// <param name="seasonId">賽季識別碼</param>
     /// <param name="playerTeam">球隊資訊</param>
     /// <param name="allPitcherStats">所有投手的投球排名緩存列表</param>
-    /// <param name="radarStats">雷達圖統計數據</param>
     /// <returns>球隊統計和球隊百分位排名字典</returns>
     private async Task<(Dictionary<string, decimal>, Dictionary<string, decimal>)> CalculatePitcherTeamStats(
         string seasonId,
-        PlayerTeam? playerTeam,
-        List<PitchingRankingCache> allPitcherStats,
-        dynamic radarStats)
+        string teamId,
+        List<PitchingRankingCache> allPitcherStats)
     {
         var teamAverages = new Dictionary<string, decimal>();
         var teamPercentileRanks = new Dictionary<string, decimal>();
 
-        if (playerTeam == null || !allPitcherStats.Any())
+        if (allPitcherStats.Count == 0)
             return (teamAverages, teamPercentileRanks);
 
-        var teamStats = await _rankingCacheService.GetTeamSeasonPitchingStatsAsync(seasonId, playerTeam.TeamId);
+        var teamStats = await _rankingCacheService.GetTeamSeasonPitchingStatsAsync(seasonId, teamId);
         if (teamStats == null)
             return (teamAverages, teamPercentileRanks);
 
+        // 計算球隊平均值
         teamAverages["ERA"] = teamStats.ERA;
         teamAverages["WHIP"] = teamStats.WHIP;
         teamAverages["K9"] = teamStats.K9;
@@ -657,7 +701,7 @@ public class PlayerDataApiController : ControllerBase
     /// <returns>百分位排名</returns>
     private decimal CalculatePercentile(List<decimal> values, decimal targetValue)
     {
-        if (!values.Any()) return 0;
+        if (values.Count == 0) return 0;
         var count = values.Count(v => v < targetValue);
         return Math.Round((decimal)count / values.Count * 100, 1);
     }
@@ -669,11 +713,11 @@ public class PlayerDataApiController : ControllerBase
     /// <returns>中位數</returns>
     private decimal CalculateMedian(List<decimal> values)
     {
-        if (!values.Any()) return 0;
-        
+        if (values.Count == 0) return 0;
+
         var sorted = values.OrderBy(v => v).ToList();
         int count = sorted.Count;
-        
+
         if (count % 2 == 1)
         {
             // 奇數個：取中間值

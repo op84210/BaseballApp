@@ -138,38 +138,210 @@
             return;
         }
 
-        // 使用後端計算的數據
-        const avgData = batterGames.map(g => +g.avgData.toFixed(3));
-        const opsData = batterGames.map(g => +g.opsData.toFixed(3));
+        // 準備數據
+        const cumulativeAVGData = batterGames.map(g => +g.avgData.toFixed(3));
+        const cumulativeOPSData = batterGames.map(g => +g.opsData.toFixed(3));
+        const gameAVGData = batterGames.map(g => g.gameAVG ? +g.gameAVG.toFixed(3) : 0);
+        const gameOPSData = batterGames.map(g => g.gameOPS ? +g.gameOPS.toFixed(3) : 0);
+        const dates = batterGames.map(g => new Date(g.date).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' }));
 
-        // 折線圖配置
-        batterLineChart.setOption({
-            title: { text: '累積 OPS / AVG 趨勢', left: 'center', textStyle: { fontSize: 14 } },
-            tooltip: { trigger: 'axis' },
-            legend: { top: 25 },
-            grid: { left: 55, right: 25, top: 70, bottom: 40 },
+        // 聯盟平均值
+        const leagueAVG = batterMedianStats.AVG ? +batterMedianStats.AVG.toFixed(3) : null;
+        const leagueOPS = batterMedianStats.OPS ? +batterMedianStats.OPS.toFixed(3) : null;
+
+        // 混合圖表配置：柱狀圖(單場) + 折線圖(累積)
+        const option = {
+            title: { 
+                text: '打擊表現趨勢 (單場 & 累積)', 
+                left: 'center', 
+                textStyle: { fontSize: 14 }
+            },
+            tooltip: {
+                trigger: 'axis',
+                axisPointer: {
+                    type: 'cross',
+                    crossStyle: {
+                        color: '#999'
+                    }
+                },
+                formatter: function(params) {
+                    let result = `<strong>${params[0].axisValue}</strong><br/>`;
+                    params.forEach(item => {
+                        if (item.seriesName.includes('聯盟')) {
+                            // 跳過聯盟平均線的tooltip
+                            return;
+                        }
+                        result += `${item.marker}${item.seriesName}: ${item.value}<br/>`;
+                    });
+                    if (leagueAVG) {
+                        result += `<span style="display:inline-block;width:10px;height:10px;border-radius:5px;background-color:#91cc75;margin-right:5px;"></span>聯盟平均AVG: ${leagueAVG.toFixed(3)}<br/>`;
+                    }
+                    if (leagueOPS) {
+                        result += `<span style="display:inline-block;width:10px;height:10px;border-radius:5px;background-color:#fac858;margin-right:5px;"></span>聯盟平均OPS: ${leagueOPS.toFixed(3)}<br/>`;
+                    }
+                    return result;
+                }
+            },
+            legend: { 
+                top: 25,
+                data: ['單場AVG', '單場OPS', '累積AVG', '累積OPS', '聯盟平均AVG', '聯盟平均OPS']
+            },
+            grid: { 
+                left: 65, 
+                right: 65, 
+                top: 70, 
+                bottom: 40 
+            },
             xAxis: {
                 type: 'category',
-                data: batterGames.map(g => new Date(g.date).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' }))
+                data: dates,
+                axisPointer: {
+                    type: 'shadow'
+                }
             },
-            yAxis: { type: 'value', name: '值' },
-            series: [
+            yAxis: [
                 {
-                    name: '累積OPS',
-                    type: 'line',
-                    smooth: true,
-                    data: opsData,
-                    areaStyle: { opacity: 0.1 }
+                    type: 'value',
+                    name: 'AVG',
+                    position: 'left',
+                    axisLabel: {
+                        formatter: '{value}'
+                    },
+                    splitLine: {
+                        lineStyle: {
+                            type: 'dashed',
+                            color: '#e0e0e0'
+                        }
+                    }
                 },
+                {
+                    type: 'value',
+                    name: 'OPS',
+                    position: 'right',
+                    axisLabel: {
+                        formatter: '{value}'
+                    },
+                    splitLine: {
+                        show: false
+                    }
+                }
+            ],
+            series: [
+                // 單場AVG - 柱狀圖
+                {
+                    name: '單場AVG',
+                    type: 'bar',
+                    yAxisIndex: 0,
+                    data: gameAVGData,
+                    itemStyle: { 
+                        color: '#91cc75',
+                        opacity: 0.6
+                    },
+                    barMaxWidth: 20,
+                    emphasis: {
+                        itemStyle: {
+                            opacity: 0.9
+                        }
+                    }
+                },
+                // 單場OPS - 柱狀圖
+                {
+                    name: '單場OPS',
+                    type: 'bar',
+                    yAxisIndex: 1,
+                    data: gameOPSData,
+                    itemStyle: { 
+                        color: '#fac858',
+                        opacity: 0.6
+                    },
+                    barMaxWidth: 20,
+                    emphasis: {
+                        itemStyle: {
+                            opacity: 0.9
+                        }
+                    }
+                },
+                // 累積AVG - 折線圖
                 {
                     name: '累積AVG',
                     type: 'line',
+                    yAxisIndex: 0,
                     smooth: true,
-                    data: avgData,
-                    areaStyle: { opacity: 0.1 }
+                    data: cumulativeAVGData,
+                    itemStyle: { color: '#5470c6' },
+                    lineStyle: { width: 3 },
+                    symbolSize: 6,
+                    emphasis: {
+                        focus: 'series'
+                    },
+                    z: 10
+                },
+                // 累積OPS - 折線圖
+                {
+                    name: '累積OPS',
+                    type: 'line',
+                    yAxisIndex: 1,
+                    smooth: true,
+                    data: cumulativeOPSData,
+                    itemStyle: { color: '#ee6666' },
+                    lineStyle: { width: 3 },
+                    symbolSize: 6,
+                    emphasis: {
+                        focus: 'series'
+                    },
+                    z: 10
                 }
             ]
-        });
+        };
+
+        // 加入聯盟平均參考線
+        if (leagueAVG) {
+            option.series.push({
+                name: '聯盟平均AVG',
+                type: 'line',
+                yAxisIndex: 0,
+                data: Array(dates.length).fill(leagueAVG),
+                lineStyle: {
+                    type: 'dashed',
+                    width: 1.5,
+                    color: '#91cc75'
+                },
+                itemStyle: { 
+                    color: '#91cc75',
+                    opacity: 0
+                },
+                symbol: 'none',
+                emphasis: {
+                    disabled: true
+                },
+                z: 1
+            });
+        }
+
+        if (leagueOPS) {
+            option.series.push({
+                name: '聯盟平均OPS',
+                type: 'line',
+                yAxisIndex: 1,
+                data: Array(dates.length).fill(leagueOPS),
+                lineStyle: {
+                    type: 'dashed',
+                    width: 1.5,
+                    color: '#fac858'
+                },
+                itemStyle: { 
+                    color: '#fac858',
+                    opacity: 0
+                },
+                symbol: 'none',
+                emphasis: {
+                    disabled: true
+                },
+                z: 1
+            });
+        }
+
+        batterLineChart.setOption(option);
     }
 
     // 渲染雷達圖
@@ -420,34 +592,210 @@
             return;
         }
 
-        // 折線圖配置
-        pitcherLineChart.setOption({
-            title: { text: '累積 ERA / WHIP 趨勢', left: 'center', textStyle: { fontSize: 14 } },
-            tooltip: { trigger: 'axis' },
-            legend: { top: 25 },
-            grid: { left: 55, right: 25, top: 70, bottom: 40 },
+        // 準備數據
+        const cumulativeERAData = pitcherGames.map(g => +g.era.toFixed(2));
+        const cumulativeWHIPData = pitcherGames.map(g => +g.whip.toFixed(2));
+        const gameERAData = pitcherGames.map(g => g.gameERA ? +g.gameERA.toFixed(2) : 0);
+        const gameWHIPData = pitcherGames.map(g => g.gameWHIP ? +g.gameWHIP.toFixed(2) : 0);
+        const dates = pitcherGames.map(g => new Date(g.date).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' }));
+
+        // 聯盟平均值
+        const leagueERA = pitcherMedianStats.ERA ? +pitcherMedianStats.ERA.toFixed(2) : null;
+        const leagueWHIP = pitcherMedianStats.WHIP ? +pitcherMedianStats.WHIP.toFixed(2) : null;
+
+        // 混合圖表配置：柱狀圖(單場) + 折線圖(累積)
+        const option = {
+            title: { 
+                text: '投球表現趨勢 (單場 & 累積)', 
+                left: 'center', 
+                textStyle: { fontSize: 14 }
+            },
+            tooltip: {
+                trigger: 'axis',
+                axisPointer: {
+                    type: 'cross',
+                    crossStyle: {
+                        color: '#999'
+                    }
+                },
+                formatter: function(params) {
+                    let result = `<strong>${params[0].axisValue}</strong><br/>`;
+                    params.forEach(item => {
+                        if (item.seriesName.includes('聯盟')) {
+                            // 跳過聯盟平均線的tooltip
+                            return;
+                        }
+                        result += `${item.marker}${item.seriesName}: ${item.value}<br/>`;
+                    });
+                    if (leagueERA) {
+                        result += `<span style="display:inline-block;width:10px;height:10px;border-radius:5px;background-color:#91cc75;margin-right:5px;"></span>聯盟平均ERA: ${leagueERA}<br/>`;
+                    }
+                    if (leagueWHIP) {
+                        result += `<span style="display:inline-block;width:10px;height:10px;border-radius:5px;background-color:#fac858;margin-right:5px;"></span>聯盟平均WHIP: ${leagueWHIP}<br/>`;
+                    }
+                    return result;
+                }
+            },
+            legend: { 
+                top: 25,
+                data: ['單場ERA', '單場WHIP', '累積ERA', '累積WHIP', '聯盟平均ERA', '聯盟平均WHIP']
+            },
+            grid: { 
+                left: 65, 
+                right: 65, 
+                top: 70, 
+                bottom: 40 
+            },
             xAxis: {
                 type: 'category',
-                data: pitcherGames.map(g => new Date(g.date).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' }))
+                data: dates,
+                axisPointer: {
+                    type: 'shadow'
+                }
             },
-            yAxis: { type: 'value', name: '值' },
+            yAxis: [
+                {
+                    type: 'value',
+                    name: 'ERA',
+                    position: 'left',
+                    axisLabel: {
+                        formatter: '{value}'
+                    },
+                    splitLine: {
+                        lineStyle: {
+                            type: 'dashed',
+                            color: '#e0e0e0'
+                        }
+                    }
+                },
+                {
+                    type: 'value',
+                    name: 'WHIP',
+                    position: 'right',
+                    axisLabel: {
+                        formatter: '{value}'
+                    },
+                    splitLine: {
+                        show: false
+                    }
+                }
+            ],
             series: [
+                // 單場ERA - 柱狀圖
+                {
+                    name: '單場ERA',
+                    type: 'bar',
+                    yAxisIndex: 0,
+                    data: gameERAData,
+                    itemStyle: { 
+                        color: '#91cc75',
+                        opacity: 0.6
+                    },
+                    barMaxWidth: 20,
+                    emphasis: {
+                        itemStyle: {
+                            opacity: 0.9
+                        }
+                    }
+                },
+                // 單場WHIP - 柱狀圖
+                {
+                    name: '單場WHIP',
+                    type: 'bar',
+                    yAxisIndex: 1,
+                    data: gameWHIPData,
+                    itemStyle: { 
+                        color: '#fac858',
+                        opacity: 0.6
+                    },
+                    barMaxWidth: 20,
+                    emphasis: {
+                        itemStyle: {
+                            opacity: 0.9
+                        }
+                    }
+                },
+                // 累積ERA - 折線圖
                 {
                     name: '累積ERA',
                     type: 'line',
+                    yAxisIndex: 0,
                     smooth: true,
-                    data: pitcherGames.map(g => +g.era.toFixed(2)),
-                    areaStyle: { opacity: 0.1 }
+                    data: cumulativeERAData,
+                    itemStyle: { color: '#5470c6' },
+                    lineStyle: { width: 3 },
+                    symbolSize: 6,
+                    emphasis: {
+                        focus: 'series'
+                    },
+                    z: 10
                 },
+                // 累積WHIP - 折線圖
                 {
                     name: '累積WHIP',
                     type: 'line',
+                    yAxisIndex: 1,
                     smooth: true,
-                    data: pitcherGames.map(g => +g.whip.toFixed(2)),
-                    areaStyle: { opacity: 0.1 }
+                    data: cumulativeWHIPData,
+                    itemStyle: { color: '#ee6666' },
+                    lineStyle: { width: 3 },
+                    symbolSize: 6,
+                    emphasis: {
+                        focus: 'series'
+                    },
+                    z: 10
                 }
             ]
-        });
+        };
+
+        // 加入聯盟平均參考線
+        if (leagueERA) {
+            option.series.push({
+                name: '聯盟平均ERA',
+                type: 'line',
+                yAxisIndex: 0,
+                data: Array(dates.length).fill(leagueERA),
+                lineStyle: {
+                    type: 'dashed',
+                    width: 1.5,
+                    color: '#91cc75'
+                },
+                itemStyle: { 
+                    color: '#91cc75',
+                    opacity: 0
+                },
+                symbol: 'none',
+                emphasis: {
+                    disabled: true
+                },
+                z: 1
+            });
+        }
+
+        if (leagueWHIP) {
+            option.series.push({
+                name: '聯盟平均WHIP',
+                type: 'line',
+                yAxisIndex: 1,
+                data: Array(dates.length).fill(leagueWHIP),
+                lineStyle: {
+                    type: 'dashed',
+                    width: 1.5,
+                    color: '#fac858'
+                },
+                itemStyle: { 
+                    color: '#fac858',
+                    opacity: 0
+                },
+                symbol: 'none',
+                emphasis: {
+                    disabled: true
+                },
+                z: 1
+            });
+        }
+
+        pitcherLineChart.setOption(option);
     }
 
     // 渲染投手雷達圖
