@@ -211,7 +211,6 @@
                     text: '能力PR值雷達圖', 
                     left: 'center', 
                     textStyle: { fontSize: 14 },
-                    subtext: 'PR值: 百分位排名 (0-100), 虛線為聯盟中位數 (PR50)',
                     subtextStyle: { fontSize: 11, color: '#999' }
                 },
                 tooltip: {
@@ -288,7 +287,7 @@
                     }
                 },
                 legend: { 
-                    top: 50,
+                    top: 25,
                     data: ['球員PR值', '隊伍平均', '聯盟中位數']
                 },
                 radar: {
@@ -490,7 +489,6 @@
                     text: '能力PR值雷達圖', 
                     left: 'center', 
                     textStyle: { fontSize: 14 },
-                    subtext: 'PR值: 百分位排名 (0-100), 虛線為聯盟中位數 (PR50)',
                     subtextStyle: { fontSize: 11, color: '#999' }
                 },
                 tooltip: {
@@ -542,7 +540,7 @@
                     }
                 },
                 legend: { 
-                    top: 50,
+                    top: 25,
                     data: ['投手PR值', '隊伍平均', '聯盟中位數']
                 },
                 radar: {

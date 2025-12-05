@@ -664,14 +664,15 @@ public class PitcherStats
     }
 
     /// <summary>
-    /// 平均每場用球數
+    /// 平均每局用球數
     /// </summary>
-    public decimal AveragePitchesPerGame
+    public decimal AveragePitchesPerInning
     {
         get
         {
-            if (Games == 0) return 0;
-            return Math.Round((decimal)TotalPitches / Games, 1);
+            if (TotalIPOuts == 0) return 0;
+            var innings = (decimal)TotalIPOuts / 3m;
+            return Math.Round((decimal)TotalPitches / innings, 1);
         }
     }
 

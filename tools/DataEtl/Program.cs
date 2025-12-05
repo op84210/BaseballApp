@@ -407,7 +407,6 @@ class Program
             -- tblBatter
             CREATE TABLE IF NOT EXISTS tblBatter (
                 playerId TEXT PRIMARY KEY,
-                playerNumber TEXT,
                 playerName TEXT NOT NULL
             );
         ";
@@ -428,7 +427,6 @@ class Program
             -- tblPitcher
             CREATE TABLE IF NOT EXISTS tblPitcher (
                 playerId TEXT PRIMARY KEY,
-                playerNumber TEXT,
                 playerName TEXT NOT NULL
             );
         ";
@@ -1276,7 +1274,7 @@ class Program
                     {
                         // 檢查打者是否已存在
                         if (!batters.Any(b => b.PlayerId == playerId))
-                            batters.Add(new Batter { PlayerId = playerId, PlayerName = playerName, PlayerNumber = playerNumber });
+                            batters.Add(new Batter { PlayerId = playerId, PlayerName = playerName });
                     }
                 }
             }
@@ -1294,7 +1292,7 @@ class Program
                     {
                         // 檢查打者是否已存在
                         if (!batters.Any(b => b.PlayerId == playerId))
-                            batters.Add(new Batter { PlayerId = playerId, PlayerName = playerName, PlayerNumber = playerNumber });
+                            batters.Add(new Batter { PlayerId = playerId, PlayerName = playerName });
                     }
                 }
             }
@@ -1304,9 +1302,8 @@ class Program
         foreach (var batter in batters.Distinct())
         {
             var insBatter = conn.CreateCommand();
-            insBatter.CommandText = "INSERT OR IGNORE INTO tblBatter(playerId,playerNumber,playerName) VALUES(@bid,@bnumber,@bname)";
+            insBatter.CommandText = "INSERT OR IGNORE INTO tblBatter(playerId,playerName) VALUES(@bid,@bname)";
             insBatter.Parameters.AddWithValue("@bid", batter.PlayerId);
-            insBatter.Parameters.AddWithValue("@bnumber", batter.PlayerNumber);
             insBatter.Parameters.AddWithValue("@bname", batter.PlayerName);
             insBatter.ExecuteNonQuery();
         }
@@ -1348,7 +1345,7 @@ class Program
                     if (!string.IsNullOrEmpty(playerId))
                     {
                         if (!pitchers.Any(p => p.PlayerId == playerId))
-                            pitchers.Add(new Pitcher { PlayerId = playerId, PlayerName = playerName, PlayerNumber = playerNumber });
+                            pitchers.Add(new Pitcher { PlayerId = playerId, PlayerName = playerName });
                     }
                 }
             }
@@ -1365,7 +1362,7 @@ class Program
                     if (!string.IsNullOrEmpty(playerId))
                     {
                         if (!pitchers.Any(p => p.PlayerId == playerId))
-                            pitchers.Add(new Pitcher { PlayerId = playerId, PlayerName = playerName, PlayerNumber = playerNumber });
+                            pitchers.Add(new Pitcher { PlayerId = playerId, PlayerName = playerName });
                     }
                 }
             }
@@ -1375,9 +1372,8 @@ class Program
         foreach (var pitcher in pitchers.Distinct())
         {
             var insPitcher = conn.CreateCommand();
-            insPitcher.CommandText = "INSERT OR IGNORE INTO tblPitcher(playerId,playerNumber,playerName) VALUES(@pid,@pnumber,@pname)";
+            insPitcher.CommandText = "INSERT OR IGNORE INTO tblPitcher(playerId,playerName) VALUES(@pid,@pname)";
             insPitcher.Parameters.AddWithValue("@pid", pitcher.PlayerId);
-            insPitcher.Parameters.AddWithValue("@pnumber", pitcher.PlayerNumber);
             insPitcher.Parameters.AddWithValue("@pname", pitcher.PlayerName);
             insPitcher.ExecuteNonQuery();
         }

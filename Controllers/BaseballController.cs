@@ -30,13 +30,11 @@ public class BaseballController : Controller
     /// <returns>
     /// 團隊列表頁面
     /// </returns>
-    public async Task<IActionResult> Teams(string? seasonId = null)
+    public async Task<IActionResult> Teams(string seasonId = "ALL")
     {
         try
         {
-            seasonId ??= "CPBL-2024-HE";
-
-            var teams = await _baseballDbService.GetAllTeamsAsync();
+            var teams = await _baseballDbService.GetAllTeamsAsync(seasonId);
             var games = await _baseballDbService.GetGamesAsync(seasonId);
 
             var teamStats = teams.Select(team => new
@@ -158,55 +156,28 @@ public class BaseballController : Controller
     /// <returns>
     /// 球員列表頁面
     /// </returns>
-    public async Task<IActionResult> Players(string? seasonId = null, string? teamId = null, string? playerType = null)
+    public async Task<IActionResult> Players(string seasonId = "ALL", string teamId = "", string playerType = "")
     {
         try
         {
-            seasonId ??= "ALL";
+            List<Player> players = new List<Player>();
 
-            var batters = await _baseballDbService.GetAllBattersAsync(seasonId);
-            var pitchers = await _baseballDbService.GetAllPitchersAsync(seasonId);
+            if (playerType == "batter" || string.IsNullOrEmpty(playerType))
+            {
+                var batters = (await _baseballDbService.GetAllBattersAsync(seasonId, teamId))
+                    .Cast<Player>().ToList();
+                players.AddRange(batters);
+            }
+            
+            if (playerType == "pitcher" || string.IsNullOrEmpty(playerType))
+            {
+                var pitchers = (await _baseballDbService.GetAllPitchersAsync(seasonId, teamId))
+                    .Cast<Player>().ToList();
+                players.AddRange(pitchers);
+            }
+            
             var teams = await _baseballDbService.GetAllTeamsAsync(seasonId);
             var seasons = await _baseballDbService.GetAllSeasonsAsync();
-
-            // 根據球隊篩選打者
-            if (!string.IsNullOrEmpty(teamId))
-            {
-                batters = batters.Where(b =>
-                {
-                    // 優先使用指定 seasonId 的球隊
-                    if (seasonId != "ALL")
-                    {
-                        var teamInSeason = b.PlayerTeams.FirstOrDefault(pt => pt.SeasonId == seasonId && pt.TeamId == teamId);
-                        if (teamInSeason != null)
-                            return true;
-                    }
-
-                    // 若無指定 seasonId 的球隊，則取最新的球隊
-                    var latestTeamFallback = b.PlayerTeams
-                        .OrderByDescending(pt => pt.StartDate)
-                        .FirstOrDefault();
-                    return latestTeamFallback?.TeamId == teamId;
-                }).ToList();
-
-                // 根據球隊篩選投手
-                pitchers = pitchers.Where(p =>
-                {
-                    // 優先使用指定 seasonId 的球隊
-                    if (seasonId != "ALL")
-                    {
-                        var teamInSeason = p.PlayerTeams.FirstOrDefault(pt => pt.SeasonId == seasonId && pt.TeamId == teamId);
-                        if (teamInSeason != null)
-                            return true;
-                    }
-
-                    // 若無指定 seasonId 的球隊，則取最新的球隊
-                    var latestTeamFallback = p.PlayerTeams
-                        .OrderByDescending(pt => pt.StartDate)
-                        .FirstOrDefault();
-                    return latestTeamFallback?.TeamId == teamId;
-                }).ToList();
-            }
 
             var seasonOptions = seasons
                 .OrderByDescending(s => s.SeasonId)
@@ -249,8 +220,8 @@ public class BaseballController : Controller
                 PlayerType = playerType,
                 SeasonOptions = seasonOptions,
                 TeamOptions = teamOptions,
-                Batters = batters.OrderBy(b => int.TryParse(b.PlayerNumber, out var num) ? num : 999).Cast<Player>().ToList(),
-                Pitchers = pitchers.OrderBy(p => int.TryParse(p.PlayerNumber, out var num) ? num : 999).Cast<Player>().ToList()
+                Players = players.OrderBy(p => 
+                    int.TryParse(p.PlayerNumber, out var num) ? num : 999).ToList()
             };
 
             return View(vm);
@@ -274,16 +245,10 @@ public class BaseballController : Controller
     /// <returns>
     /// 球員詳細資訊頁面
     /// </returns>
-    public async Task<IActionResult> PlayerDetail(string playerId, string? seasonId = null)
+    public async Task<IActionResult> PlayerDetail(string playerId, string seasonId = "ALL")
     {
         try
         {
-            // 支援全部賽季：傳入 ALL 代表生涯統計
-            if (seasonId == "ALL")
-            {
-                seasonId = null; // 使用 null 表示生涯
-            }
-
             // 讀取賽季列表（供下拉選單）
             var seriesList = await GetAllSeasonsAsync();
 
@@ -299,7 +264,7 @@ public class BaseballController : Controller
 
             var model = new PlayerDetailViewModel
             {
-                SeasonId = seasonId ?? "ALL",
+                SeasonId = seasonId,
                 SeriesList = seriesList,
                 BatterDetail = batterDetail,
                 PitcherDetail = pitcherDetail
@@ -326,7 +291,7 @@ public class BaseballController : Controller
     /// <returns>
     /// 打者詳細資料模型，若找不到則回傳 null
     /// </returns>
-    private async Task<BatterDetailModel?> BuildBatterDetail(string playerId, string? seasonId)
+    private async Task<BatterDetailModel?> BuildBatterDetail(string playerId, string seasonId)
     {
         var batter = await _baseballDbService.GetBatterAsync(playerId);
         if (batter == null) return null;
@@ -480,7 +445,7 @@ public class BaseballController : Controller
     /// <returns>
     /// 投手詳細資料模型
     /// </returns>
-    private async Task<PitcherDetailModel?> BuildPitcherDetail(string playerId, string? seasonId)
+    private async Task<PitcherDetailModel?> BuildPitcherDetail(string playerId, string seasonId)
     {
         // 取得投手基本資料
         var pitcher = await _baseballDbService.GetPitcherAsync(playerId);
@@ -633,7 +598,7 @@ public class BaseballController : Controller
     /// <returns>
     /// 賽季列表
     /// </returns>
-    private async Task<List<SelectListItem>> GetAllSeasonsAsync(string? playerId = null)
+    private async Task<List<SelectListItem>> GetAllSeasonsAsync(string playerId = "")
     {
         try
         {

@@ -70,7 +70,6 @@ public class BaseballDbContext : DbContext
             entity.HasKey(e => e.PlayerId);
             entity.Property(e => e.PlayerId).HasColumnName("playerId");
             entity.Property(e => e.PlayerName).HasColumnName("playerName");
-            entity.Property(e => e.PlayerNumber).HasColumnName("playerNumber");
         });
 
         // tblPitcher
@@ -80,7 +79,6 @@ public class BaseballDbContext : DbContext
             entity.HasKey(e => e.PlayerId);
             entity.Property(e => e.PlayerId).HasColumnName("playerId");
             entity.Property(e => e.PlayerName).HasColumnName("playerName");
-            entity.Property(e => e.PlayerNumber).HasColumnName("playerNumber");
         });
 
         // tblPlayerTeam

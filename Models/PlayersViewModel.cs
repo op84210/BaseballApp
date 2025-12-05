@@ -20,14 +20,9 @@ public class PlayersViewModel
     public string? PlayerType { get; set; }
 
     /// <summary>
-    /// 打者列表
+    /// 選手列表
     /// </summary>
-    public List<Player> Batters { get; set; } = [];
-
-    /// <summary>
-    /// 投手列表
-    /// </summary>
-    public List<Player> Pitchers { get; set; } = [];
+    public List<Player> Players { get; set; } = [];
 
     /// <summary>
     /// 賽季下拉選單項目

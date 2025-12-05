@@ -46,19 +46,7 @@
 
     <!-- 球員列表 -->
     <div class="row">
-        @{
-            List<Player> playersToShow = Model.PlayerType switch
-            {
-                "pitcher" => Model.Pitchers.Cast<Player>().ToList(),
-                "batter" => Model.Batters.Cast<Player>().ToList(),
-                _ => Model.Batters.Concat(Model.Pitchers)
-                    .Cast<Player>()
-                    .DistinctBy(p => p.PlayerId)
-                    .ToList()
-            };
-        }
-
-        @if (playersToShow.Count == 0)
+        @if (Model.Players.Count == 0)
         {
             <div class="col-12">
                 <div class="alert alert-info">
@@ -68,7 +56,7 @@
         }
         else
         {
-            @foreach (Player player in playersToShow)
+            @foreach (Player player in Model.Players)
             {
                 <div class="col-md-3 mb-3">
                     <div class="card h-100">

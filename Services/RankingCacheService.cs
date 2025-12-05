@@ -505,7 +505,8 @@ public class RankingCacheService : IRankingCacheService
                                 CAST(pa AS REAL) as pa,
                                 CAST(hr AS REAL) as hr,
                                 CAST(so AS REAL) as so,
-                                CAST(bb AS REAL) as bb
+                                CAST(bb AS REAL) as bb,
+                                CAST(runsScored AS REAL) as r
                             FROM tblTeamSeasonRankingCache
                             WHERE seasonId = {seasonId} AND teamId = {teamId}
                         ")
@@ -516,50 +517,25 @@ public class RankingCacheService : IRankingCacheService
                 return null;
             }
 
-            // 查詢球隊該季的打者人數和RBI總數
-            int playerCount;
-            int totalRBI;
-            
-            if (seasonId == "ALL")
-            {
-                // 當 seasonId 為 "ALL" 時，查詢該球隊歷史所有不同的打者
-                var teamPlayerIds = await _context.PlayerTeams
-                    .Where(pt => pt.TeamId == teamId)
-                    .Select(pt => pt.PlayerId)
-                    .Distinct()
-                    .ToListAsync();
+            // 查詢該球隊該特定賽季的打者人數
+            var teamPlayerIds = await _context.PlayerTeams
+                .Where(pt => pt.TeamId == teamId && (pt.SeasonId == seasonId || seasonId == "ALL"))
+                .Select(pt => pt.PlayerId)
+                .Distinct()
+                .ToListAsync();
 
-                playerCount = await _context.PAs
-                    .Where(pa => pa.BatterId != null && teamPlayerIds.Contains(pa.BatterId))
-                    .Select(pa => pa.BatterId)
-                    .Distinct()
-                    .CountAsync();
+            // 打者人數
+            int playerCount = await _context.PAs
+                .Where(pa => (pa.SeasonId == seasonId || seasonId == "ALL") && pa.BatterId != null && teamPlayerIds.Contains(pa.BatterId))
+                .Select(pa => pa.BatterId)
+                .Distinct()
+                .CountAsync();
 
-                totalRBI = await _context.PAs
-                    .Where(pa => pa.BatterId != null && teamPlayerIds.Contains(pa.BatterId))
-                    .SumAsync(pa => pa.RBI ?? 0);
-            }
-            else
-            {
-                // 查詢該球隊該特定賽季的打者人數
-                var teamPlayerIds = await _context.PlayerTeams
-                    .Where(pt => pt.TeamId == teamId && pt.SeasonId == seasonId)
-                    .Select(pt => pt.PlayerId)
-                    .Distinct()
-                    .ToListAsync();
+            // 計算RBI總數
+            int totalRBI = await _context.PAs
+                .Where(pa => (pa.SeasonId == seasonId || seasonId == "ALL") && pa.BatterId != null && teamPlayerIds.Contains(pa.BatterId))
+                .SumAsync(pa => pa.RBI ?? 0);
 
-                playerCount = await _context.PAs
-                    .Where(pa => pa.SeasonId == seasonId && pa.BatterId != null && teamPlayerIds.Contains(pa.BatterId))
-                    .Select(pa => pa.BatterId)
-                    .Distinct()
-                    .CountAsync();
-
-                totalRBI = await _context.PAs
-                    .Where(pa => pa.SeasonId == seasonId && pa.BatterId != null && teamPlayerIds.Contains(pa.BatterId))
-                    .SumAsync(pa => pa.RBI ?? 0);
-            }
-
-            // 計算平均每人的統計值
             // 注意：AVG, OBP, SLG, OPS 已經是比率，不需要除以打者人數
             var totalPA = result.Pa ?? 0;
             var avgHRPerPlayer = playerCount > 0 ? (result.Hr ?? 0) / playerCount : 0;
@@ -577,7 +553,8 @@ public class RankingCacheService : IRankingCacheService
                 HR = (decimal)avgHRPerPlayer,
                 RBI = (decimal)avgRBIPerPlayer,
                 SO = (decimal)avgSOPerPlayer,
-                BB = (decimal)avgBBPerPlayer
+                BB = (decimal)avgBBPerPlayer,
+                R = (int)Math.Round(result.R ?? 0)
             };
         }
         catch (Exception ex)
@@ -643,104 +620,61 @@ public class RankingCacheService : IRankingCacheService
     {
         try
         {
-            // 使用 SQL 一次性查詢所有球隊及其統計數據
+            // 使用 SQL 一次性查詢所有球隊基礎數據（含得分）
             var results = await _context.Database
-                .SqlQuery<dynamic>($@"
+                .SqlQuery<TeamSeasonCacheRow>($@"
                     SELECT 
                         t.teamId, t.avg, t.obp, t.slg, t.ops,
-                        t.hr, t.so, t.bb
+                        t.hr, t.so, t.bb, t.runsScored
                     FROM tblTeamSeasonRankingCache t
                     WHERE t.seasonId = {seasonId}
                 ")
                 .ToListAsync();
 
             var teamStats = new List<TeamSeasonStatsDto>();
-            foreach (var r in results)
+
+            foreach (var row in results)
             {
-                var teamId = (string)r.teamId;
-                var avg = (double?)r.avg ?? 0;
-                var obp = (double?)r.obp ?? 0;
-                var slg = (double?)r.slg ?? 0;
-                var ops = (double?)r.ops ?? 0;
-                var hr = (double?)r.hr ?? 0;
-                var so = (double?)r.so ?? 0;
-                var bb = (double?)r.bb ?? 0;
+                var teamId = row.TeamId;
 
-                // 查詢該球隊的打者人數
-                int playerCount = 0;
-                int totalRBI = 0;
-
-                if (seasonId == "ALL")
-                {
-                    // 查詢該球隊歷史所有不同的打者
-                    playerCount = await _context.Database
-                        .SqlQuery<int>($@"
-                            SELECT COUNT(DISTINCT pa.BatterId)
-                            FROM tblPA pa
-                            WHERE pa.BatterId IN (
-                                SELECT DISTINCT PlayerId 
-                                FROM tblPlayerTeam 
-                                WHERE TeamId = {teamId}
-                            )
-                        ")
-                        .FirstOrDefaultAsync();
-
-                    // 查詢所有RBI
-                    totalRBI = await _context.Database
-                        .SqlQuery<int>($@"
-                            SELECT COALESCE(SUM(pa.RBI), 0)
-                            FROM tblPA pa
-                            WHERE pa.BatterId IN (
-                                SELECT DISTINCT PlayerId 
-                                FROM tblPlayerTeam 
-                                WHERE TeamId = {teamId}
-                            )
-                        ")
-                        .FirstOrDefaultAsync();
-                }
-                else
-                {
-                    // 查詢該球隊該特定賽季的打者人數
-                    playerCount = await _context.Database
-                        .SqlQuery<int>($@"
-                            SELECT COUNT(DISTINCT pa.BatterId)
-                            FROM tblPA pa
-                            WHERE pa.SeasonId = {seasonId} 
+                // 查詢球隊該季的打者人數和RBI總數
+                int playerCount = await _context.Database
+                    .SqlQuery<int>($@"
+                        SELECT COUNT(DISTINCT pa.BatterId)
+                        FROM tblPA pa
+                        WHERE pa.SeasonId = {seasonId}
                             AND pa.BatterId IN (
-                                SELECT DISTINCT PlayerId 
-                                FROM tblPlayerTeam 
-                                WHERE TeamId = {teamId} AND SeasonId = {seasonId}
+                                SELECT DISTINCT PlayerId FROM tblPlayerTeam WHERE 
+                                    TeamId = {teamId} AND (SeasonId = {seasonId} OR SeasonId = 'ALL')
                             )
-                        ")
-                        .FirstOrDefaultAsync();
+                    ")
+                    .FirstOrDefaultAsync();
 
-                    // 查詢該季的RBI
-                    totalRBI = await _context.Database
-                        .SqlQuery<int>($@"
-                            SELECT COALESCE(SUM(pa.RBI), 0)
-                            FROM tblPA pa
-                            WHERE pa.SeasonId = {seasonId} 
+                int totalRBI = await _context.Database
+                    .SqlQuery<int>($@"
+                        SELECT COALESCE(SUM(pa.RBI), 0)
+                        FROM tblPA pa
+                        WHERE pa.SeasonId = {seasonId}
                             AND pa.BatterId IN (
-                                SELECT DISTINCT PlayerId 
-                                FROM tblPlayerTeam 
-                                WHERE TeamId = {teamId} AND SeasonId = {seasonId}
+                                SELECT DISTINCT PlayerId FROM tblPlayerTeam WHERE 
+                                    TeamId = {teamId} AND (SeasonId = {seasonId} OR SeasonId = 'ALL')
                             )
-                        ")
-                        .FirstOrDefaultAsync();
-                }
+                    ")
+                    .FirstOrDefaultAsync();
 
                 var avgRBIPerPlayer = playerCount > 0 ? (double)totalRBI / playerCount : 0;
 
                 teamStats.Add(new TeamSeasonStatsDto
                 {
-                    AVG = (decimal)avg,
-                    OBP = (decimal)obp,
-                    SLG = (decimal)slg,
-                    OPS = (decimal)ops,
-                    HR = (decimal)(playerCount > 0 ? hr / playerCount : 0),
+                    AVG = (decimal)row.Avg,
+                    OBP = (decimal)row.Obp,
+                    SLG = (decimal)row.Slg,
+                    OPS = (decimal)row.Ops,
+                    HR = (decimal)(playerCount > 0 ? row.Hr / playerCount : 0),
                     RBI = (decimal)avgRBIPerPlayer,
-                    SO = (decimal)(playerCount > 0 ? so / playerCount : 0),
-                    BB = (decimal)(playerCount > 0 ? bb / playerCount : 0)
+                    SO = (decimal)(playerCount > 0 ? row.So / playerCount : 0),
+                    BB = (decimal)(playerCount > 0 ? row.Bb / playerCount : 0),
+                    R = (int)Math.Round(row.RunsScored)
                 });
             }
 
@@ -751,6 +685,19 @@ public class RankingCacheService : IRankingCacheService
             _logger.LogError(ex, $"查詢所有球隊打者統計資料時發生錯誤: seasonId={seasonId}");
             return new List<TeamSeasonStatsDto>();
         }
+    }
+
+    private class TeamSeasonCacheRow
+    {
+        public string TeamId { get; set; } = string.Empty;
+        public double Avg { get; set; }
+        public double Obp { get; set; }
+        public double Slg { get; set; }
+        public double Ops { get; set; }
+        public double Hr { get; set; }
+        public double So { get; set; }
+        public double Bb { get; set; }
+        public double RunsScored { get; set; }
     }
 
     public async Task<List<TeamSeasonPitchingStatsDto>> GetAllTeamSeasonPitchingStatsAsync(string seasonId)
