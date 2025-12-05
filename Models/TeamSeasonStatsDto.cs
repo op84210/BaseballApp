@@ -5,6 +5,7 @@ namespace BaseballApp.Models;
 /// </summary>
 public class TeamSeasonStatsDto
 {
+    public decimal PA { get; set; }
     public decimal AVG { get; set; }
     public decimal OBP { get; set; }
     public decimal SLG { get; set; }
@@ -13,6 +14,7 @@ public class TeamSeasonStatsDto
     public decimal RBI { get; set; }
     public decimal SO { get; set; }
     public decimal BB { get; set; }
+    public int R { get; set; }
 }
 
 /// <summary>
@@ -20,6 +22,7 @@ public class TeamSeasonStatsDto
 /// </summary>
 public class TeamSeasonStatsQueryResult
 {
+    public double? Pa { get; set; }
     public double? Avg { get; set; }
     public double? Obp { get; set; }
     public double? Slg { get; set; }
@@ -27,6 +30,7 @@ public class TeamSeasonStatsQueryResult
     public double? Hr { get; set; }
     public double? So { get; set; }
     public double? Bb { get; set; }
+    public double? R { get; set; }
 }
 
 /// <summary>

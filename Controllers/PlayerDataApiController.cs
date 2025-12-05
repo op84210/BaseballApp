@@ -60,10 +60,10 @@ public class PlayerDataApiController : ControllerBase
             // 計算雷達圖數據
             var radarStats = CalculateBatterRadarStats(gameStats);
             
-            // 計算百分位排名和賽季平均值
+            // 計算百分位排名和聯盟中位數
             var allPlayerStats = await _rankingCacheService.GetBattingStatsFromCacheAsync(seasonId);
             var percentileRanks = CalculateBatterPercentiles(gameStats, allPlayerStats);
-            var seasonAverages = CalculateSeasonAverages(allPlayerStats);
+            var leagueMedianStats = CalculateLeagueMedianStats(allPlayerStats);
 
             // 計算球隊平均值和球隊PR值
             var playerTeam = batter.PlayerTeams
@@ -83,7 +83,7 @@ public class PlayerDataApiController : ControllerBase
                 chartData,
                 radarStats,
                 percentileRanks,
-                seasonAverages,
+                leagueMedianStats,
                 teamAverages,
                 teamPercentileRanks
             });
@@ -121,6 +121,7 @@ public class PlayerDataApiController : ControllerBase
                 bb = g.Count(pa => pa.Result == "uBB" || pa.Result == "IBB"),
                 hbp = g.Count(pa => pa.Result == "HBP"),
                 sf = g.Count(pa => pa.Result == "SF"),
+                r = g.Count(pa => pa.Scored),
                 rbi = g.Sum(pa => pa.RBI ?? 0)
             } as dynamic)
             .OrderBy(x => x.date)
@@ -183,6 +184,8 @@ public class PlayerDataApiController : ControllerBase
         int totalHR = gameStats.Sum(g => (int)g.hr);
         int totalRBI = gameStats.Sum(g => (int)g.rbi);
         int totalSO = gameStats.Sum(g => (int)g.so);
+        int totalPA = gameStats.Sum(g => (int)g.pa);
+        int totalR = gameStats.Sum(g => (int)g.r);
         int total1B = gameStats.Sum(g => (int)g._1b);
         int total2B = gameStats.Sum(g => (int)g._2b);
         int total3B = gameStats.Sum(g => (int)g._3b);
@@ -193,6 +196,11 @@ public class PlayerDataApiController : ControllerBase
         var totalBases = total1B + total2B * 2 + total3B * 3 + totalHR * 4;
         var slg = totalAB > 0 ? (decimal)totalBases / totalAB : 0;
         var ops = obp + slg;
+        
+        // 計算三振率、保送率和得分率（以打席數為分母）
+        var kPct = totalPA > 0 ? Math.Round((decimal)totalSO / totalPA * 100, 1) : 0;
+        var bbPct = totalPA > 0 ? Math.Round((decimal)totalBB / totalPA * 100, 1) : 0;
+        var rPct = totalPA > 0 ? Math.Round((decimal)totalR / totalPA * 100, 1) : 0;
 
         return new
         {
@@ -200,10 +208,10 @@ public class PlayerDataApiController : ControllerBase
             obp = obp,
             slg = slg,
             ops = ops,
-            hr = totalHR,
             rbi = totalRBI,
-            so = totalSO,
-            bb = totalBB
+            r = rPct,
+            so = kPct,
+            bb = bbPct
         };
     }
 
@@ -228,6 +236,8 @@ public class PlayerDataApiController : ControllerBase
         int totalHR = gameStats.Sum(g => (int)g.hr);
         int totalRBI = gameStats.Sum(g => (int)g.rbi);
         int totalSO = gameStats.Sum(g => (int)g.so);
+        int totalPA = gameStats.Sum(g => (int)g.pa);
+        int totalR = gameStats.Sum(g => (int)g.r);
         int total1B = gameStats.Sum(g => (int)g._1b);
         int total2B = gameStats.Sum(g => (int)g._2b);
         int total3B = gameStats.Sum(g => (int)g._3b);
@@ -238,41 +248,46 @@ public class PlayerDataApiController : ControllerBase
         var totalBases = total1B + total2B * 2 + total3B * 3 + totalHR * 4;
         var slg = totalAB > 0 ? (decimal)totalBases / totalAB : 0;
         var ops = obp + slg;
+        
+        // 計算三振率、保送率和得分率（以打席數為分母）
+        var kPct = totalPA > 0 ? (decimal)totalSO / totalPA : 0;
+        var bbPct = totalPA > 0 ? (decimal)totalBB / totalPA : 0;
+        var rPct = totalPA > 0 ? (decimal)totalR / totalPA : 0;
 
         percentileRanks["AVG"] = CalculatePercentile(allPlayerStats.Select(p => p.AVG).ToList(), avg);
         percentileRanks["OBP"] = CalculatePercentile(allPlayerStats.Select(p => p.OBP).ToList(), obp);
         percentileRanks["SLG"] = CalculatePercentile(allPlayerStats.Select(p => p.SLG).ToList(), slg);
         percentileRanks["OPS"] = CalculatePercentile(allPlayerStats.Select(p => p.OPS).ToList(), ops);
-        percentileRanks["HR"] = CalculatePercentile(allPlayerStats.Select(p => (decimal)p.HR).ToList(), totalHR);
         percentileRanks["RBI"] = CalculatePercentile(allPlayerStats.Select(p => (decimal)p.RBI).ToList(), totalRBI);
-        percentileRanks["SO"] = 100 - CalculatePercentile(allPlayerStats.Select(p => (decimal)p.SO).ToList(), totalSO);
-        percentileRanks["BB"] = CalculatePercentile(allPlayerStats.Select(p => (decimal)p.BB).ToList(), totalBB);
+        percentileRanks["R"] = CalculatePercentile(allPlayerStats.Select(p => (decimal)p.R / (p.PA > 0 ? p.PA : 1)).ToList(), rPct);
+        percentileRanks["SO"] = 100 - CalculatePercentile(allPlayerStats.Select(p => (decimal)p.SO / (p.PA > 0 ? p.PA : 1)).ToList(), kPct);
+        percentileRanks["BB"] = CalculatePercentile(allPlayerStats.Select(p => (decimal)p.BB / (p.PA > 0 ? p.PA : 1)).ToList(), bbPct);
 
         return percentileRanks;
     }
 
     /// <summary>
-    /// 計算賽季打者平均值
+    /// 計算聯盟中位數打者統計
     /// </summary>
     /// <param name="allPlayerStats">所有球員的打擊排名緩存列表</param>
-    /// <returns>賽季打者平均值字典</returns>
-    private Dictionary<string, decimal> CalculateSeasonAverages(List<BattingRankingCache> allPlayerStats)
+    /// <returns>聯盟中位數打者統計字典</returns>
+    private Dictionary<string, decimal> CalculateLeagueMedianStats(List<BattingRankingCache> allPlayerStats)
     {
-        var seasonAverages = new Dictionary<string, decimal>();
+        var leagueMedianStats = new Dictionary<string, decimal>();
         
         if (!allPlayerStats.Any())
-            return seasonAverages;
+            return leagueMedianStats;
 
-        seasonAverages["AVG"] = allPlayerStats.Average(p => p.AVG);
-        seasonAverages["OBP"] = allPlayerStats.Average(p => p.OBP);
-        seasonAverages["SLG"] = allPlayerStats.Average(p => p.SLG);
-        seasonAverages["OPS"] = allPlayerStats.Average(p => p.OPS);
-        seasonAverages["HR"] = (decimal)allPlayerStats.Average(p => p.HR);
-        seasonAverages["RBI"] = (decimal)allPlayerStats.Average(p => p.RBI);
-        seasonAverages["SO"] = (decimal)allPlayerStats.Average(p => p.SO);
-        seasonAverages["BB"] = (decimal)allPlayerStats.Average(p => p.BB);
+        leagueMedianStats["AVG"] = CalculateMedian(allPlayerStats.Select(p => p.AVG).ToList());
+        leagueMedianStats["OBP"] = CalculateMedian(allPlayerStats.Select(p => p.OBP).ToList());
+        leagueMedianStats["SLG"] = CalculateMedian(allPlayerStats.Select(p => p.SLG).ToList());
+        leagueMedianStats["OPS"] = CalculateMedian(allPlayerStats.Select(p => p.OPS).ToList());
+        leagueMedianStats["RBI"] = CalculateMedian(allPlayerStats.Select(p => (decimal)p.RBI).ToList());
+        leagueMedianStats["R"] = CalculateMedian(allPlayerStats.Select(p => p.PA > 0 ? (decimal)p.R / p.PA * 100 : 0).ToList());
+        leagueMedianStats["SO"] = CalculateMedian(allPlayerStats.Select(p => p.PA > 0 ? (decimal)p.SO / p.PA * 100 : 0).ToList());
+        leagueMedianStats["BB"] = CalculateMedian(allPlayerStats.Select(p => p.PA > 0 ? (decimal)p.BB / p.PA * 100 : 0).ToList());
 
-        return seasonAverages;
+        return leagueMedianStats;
     }
 
     /// <summary>
@@ -297,23 +312,28 @@ public class PlayerDataApiController : ControllerBase
         if (teamStats == null)
             return (teamAverages, teamPercentileRanks);
 
+        // 計算球隊的三振率、保送率和得分率
+        var teamKPct = teamStats.PA > 0 ? (decimal)teamStats.SO / teamStats.PA * 100 : 0;
+        var teamBBPct = teamStats.PA > 0 ? (decimal)teamStats.BB / teamStats.PA * 100 : 0;
+        var teamRPct = teamStats.PA > 0 ? (decimal)teamStats.R / teamStats.PA * 100 : 0;
+
         teamAverages["AVG"] = (decimal)teamStats.AVG;
         teamAverages["OBP"] = (decimal)teamStats.OBP;
         teamAverages["SLG"] = (decimal)teamStats.SLG;
         teamAverages["OPS"] = (decimal)teamStats.OPS;
-        teamAverages["HR"] = teamStats.HR;
         teamAverages["RBI"] = teamStats.RBI;
-        teamAverages["SO"] = teamStats.SO;
-        teamAverages["BB"] = teamStats.BB;
+        teamAverages["R"] = teamRPct;
+        teamAverages["SO"] = teamKPct;
+        teamAverages["BB"] = teamBBPct;
 
         teamPercentileRanks["AVG"] = CalculatePercentile(allPlayerStats.Select(p => p.AVG).ToList(), (decimal)teamStats.AVG);
         teamPercentileRanks["OBP"] = CalculatePercentile(allPlayerStats.Select(p => p.OBP).ToList(), (decimal)teamStats.OBP);
         teamPercentileRanks["SLG"] = CalculatePercentile(allPlayerStats.Select(p => p.SLG).ToList(), (decimal)teamStats.SLG);
         teamPercentileRanks["OPS"] = CalculatePercentile(allPlayerStats.Select(p => p.OPS).ToList(), (decimal)teamStats.OPS);
-        teamPercentileRanks["HR"] = CalculatePercentile(allPlayerStats.Select(p => (decimal)p.HR).ToList(), teamStats.HR);
         teamPercentileRanks["RBI"] = CalculatePercentile(allPlayerStats.Select(p => (decimal)p.RBI).ToList(), teamStats.RBI);
-        teamPercentileRanks["SO"] = 100 - CalculatePercentile(allPlayerStats.Select(p => (decimal)p.SO).ToList(), teamStats.SO);
-        teamPercentileRanks["BB"] = CalculatePercentile(allPlayerStats.Select(p => (decimal)p.BB).ToList(), teamStats.BB);
+        teamPercentileRanks["R"] = CalculatePercentile(allPlayerStats.Select(p => (decimal)p.R / (p.PA > 0 ? p.PA : 1)).ToList(), teamRPct / 100);
+        teamPercentileRanks["SO"] = 100 - CalculatePercentile(allPlayerStats.Select(p => (decimal)p.SO / (p.PA > 0 ? p.PA : 1)).ToList(), teamKPct / 100);
+        teamPercentileRanks["BB"] = CalculatePercentile(allPlayerStats.Select(p => (decimal)p.BB / (p.PA > 0 ? p.PA : 1)).ToList(), teamBBPct / 100);
 
         return (teamAverages, teamPercentileRanks);
     }
@@ -331,7 +351,7 @@ public class PlayerDataApiController : ControllerBase
             chartData = new List<object>(),
             radarStats = new { },
             percentileRanks = new Dictionary<string, decimal>(),
-            seasonAverages = new Dictionary<string, decimal>(),
+            leagueMedianStats = new Dictionary<string, decimal>(),
             teamAverages = new Dictionary<string, decimal>(),
             teamPercentileRanks = new Dictionary<string, decimal>()
         };
@@ -375,10 +395,10 @@ public class PlayerDataApiController : ControllerBase
             // 計算雷達圖數據
             var radarStats = CalculatePitcherRadarStats(gameStatsData);
             
-            // 計算百分位排名和賽季平均值
+            // 計算百分位排名和聯盟中位數
             var allPitcherStats = await _rankingCacheService.GetPitchingStatsFromCacheAsync(seasonId);
             var percentileRanks = CalculatePitcherPercentiles(gameStatsData, radarStats, allPitcherStats);
-            var seasonAverages = CalculatePitcherSeasonAverages(allPitcherStats);
+            var leagueMedianStats = CalculatePitcherLeagueMedianStats(allPitcherStats);
 
             // 計算球隊平均值和球隊PR值
             var playerTeam = pitcher.PlayerTeams
@@ -398,7 +418,7 @@ public class PlayerDataApiController : ControllerBase
                 chartData,
                 radarStats,
                 percentileRanks,
-                seasonAverages,
+                leagueMedianStats,
                 teamAverages,
                 teamPercentileRanks
             });
@@ -544,26 +564,26 @@ public class PlayerDataApiController : ControllerBase
     }
 
     /// <summary>
-    /// 計算賽季投手平均值
+    /// 計算聯盟中位數投手統計
     /// </summary>
     /// <param name="allPitcherStats">所有投手的投球排名緩存列表</param>
-    /// <returns>賽季投手平均值字典</returns>
-    private Dictionary<string, decimal> CalculatePitcherSeasonAverages(List<PitchingRankingCache> allPitcherStats)
+    /// <returns>聯盟中位數投手統計字典</returns>
+    private Dictionary<string, decimal> CalculatePitcherLeagueMedianStats(List<PitchingRankingCache> allPitcherStats)
     {
-        var seasonAverages = new Dictionary<string, decimal>();
+        var leagueMedianStats = new Dictionary<string, decimal>();
         
         if (!allPitcherStats.Any())
-            return seasonAverages;
+            return leagueMedianStats;
 
-        seasonAverages["ERA"] = allPitcherStats.Average(p => p.ERA);
-        seasonAverages["WHIP"] = allPitcherStats.Average(p => p.WHIP);
-        seasonAverages["K9"] = allPitcherStats.Average(p => p.K9);
-        seasonAverages["BB9"] = allPitcherStats.Average(p => p.BB9);
-        seasonAverages["KBB"] = allPitcherStats.Average(p => p.KBBRatio);
-        seasonAverages["BAA"] = allPitcherStats.Average(p => p.BAA);
-        seasonAverages["SO"] = (decimal)allPitcherStats.Average(p => p.SO);
+        leagueMedianStats["ERA"] = CalculateMedian(allPitcherStats.Select(p => p.ERA).ToList());
+        leagueMedianStats["WHIP"] = CalculateMedian(allPitcherStats.Select(p => p.WHIP).ToList());
+        leagueMedianStats["K9"] = CalculateMedian(allPitcherStats.Select(p => p.K9).ToList());
+        leagueMedianStats["BB9"] = CalculateMedian(allPitcherStats.Select(p => p.BB9).ToList());
+        leagueMedianStats["KBB"] = CalculateMedian(allPitcherStats.Select(p => p.KBBRatio).ToList());
+        leagueMedianStats["BAA"] = CalculateMedian(allPitcherStats.Select(p => p.BAA).ToList());
+        leagueMedianStats["SO"] = CalculateMedian(allPitcherStats.Select(p => (decimal)p.SO).ToList());
 
-        return seasonAverages;
+        return leagueMedianStats;
     }
 
     /// <summary>
@@ -623,7 +643,7 @@ public class PlayerDataApiController : ControllerBase
             chartData = new List<object>(),
             radarStats = new { },
             percentileRanks = new Dictionary<string, decimal>(),
-            seasonAverages = new Dictionary<string, decimal>(),
+            leagueMedianStats = new Dictionary<string, decimal>(),
             teamAverages = new Dictionary<string, decimal>(),
             teamPercentileRanks = new Dictionary<string, decimal>()
         };
@@ -640,5 +660,29 @@ public class PlayerDataApiController : ControllerBase
         if (!values.Any()) return 0;
         var count = values.Count(v => v < targetValue);
         return Math.Round((decimal)count / values.Count * 100, 1);
+    }
+
+    /// <summary>
+    /// 計算中位數
+    /// </summary>
+    /// <param name="values">數值列表</param>
+    /// <returns>中位數</returns>
+    private decimal CalculateMedian(List<decimal> values)
+    {
+        if (!values.Any()) return 0;
+        
+        var sorted = values.OrderBy(v => v).ToList();
+        int count = sorted.Count;
+        
+        if (count % 2 == 1)
+        {
+            // 奇數個：取中間值
+            return sorted[count / 2];
+        }
+        else
+        {
+            // 偶數個：取中間兩個的平均
+            return (sorted[count / 2 - 1] + sorted[count / 2]) / 2;
+        }
     }
 }

@@ -502,6 +502,7 @@ public class RankingCacheService : IRankingCacheService
                         .SqlQuery<TeamSeasonStatsQueryResult>($@"
                             SELECT 
                                 avg, obp, slg, ops,
+                                CAST(pa AS REAL) as pa,
                                 CAST(hr AS REAL) as hr,
                                 CAST(so AS REAL) as so,
                                 CAST(bb AS REAL) as bb
@@ -560,6 +561,7 @@ public class RankingCacheService : IRankingCacheService
 
             // 計算平均每人的統計值
             // 注意：AVG, OBP, SLG, OPS 已經是比率，不需要除以打者人數
+            var totalPA = result.Pa ?? 0;
             var avgHRPerPlayer = playerCount > 0 ? (result.Hr ?? 0) / playerCount : 0;
             var avgRBIPerPlayer = playerCount > 0 ? (double)totalRBI / playerCount : 0;
             var avgSOPerPlayer = playerCount > 0 ? (result.So ?? 0) / playerCount : 0;
@@ -567,6 +569,7 @@ public class RankingCacheService : IRankingCacheService
 
             return new TeamSeasonStatsDto
             {
+                PA = (decimal)totalPA,
                 AVG = (decimal)(result.Avg ?? 0),
                 OBP = (decimal)(result.Obp ?? 0),
                 SLG = (decimal)(result.Slg ?? 0),

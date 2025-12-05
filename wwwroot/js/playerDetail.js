@@ -11,7 +11,7 @@
     // 打者數據變數
     let batterGames = [];
     let batterPR = {};
-    let batterSeasonAvg = {};
+    let batterMedianStats = {};
     let batterTeamAvg = {};
     let batterTeamPR = {};
     let batterRadarStats = {};
@@ -19,7 +19,7 @@
     // 投手數據變數
     let pitcherGames = [];
     let pitcherPR = {};
-    let pitcherSeasonAvg = {};
+    let pitcherMedianStats = {};
     let pitcherTeamAvg = {};
     let pitcherTeamPR = {};
     let pitcherRadarStats = {};
@@ -79,7 +79,7 @@
                 if (batterData.hasData !== false) {
                     batterGames = batterData.chartData || [];
                     batterPR = batterData.percentileRanks || {};
-                    batterSeasonAvg = batterData.seasonAverages || {};
+                    batterMedianStats = batterData.leagueMedianStats || {};
                     batterTeamAvg = batterData.teamAverages || {};
                     batterTeamPR = batterData.teamPercentileRanks || {};
                     batterRadarStats = batterData.radarStats || {};
@@ -92,7 +92,7 @@
                 if (pitcherData.hasData !== false) {
                     pitcherGames = pitcherData.chartData || [];
                     pitcherPR = pitcherData.percentileRanks || {};
-                    pitcherSeasonAvg = pitcherData.seasonAverages || {};
+                    pitcherMedianStats = pitcherData.leagueMedianStats || {};
                     pitcherTeamAvg = pitcherData.teamAverages || {};
                     pitcherTeamPR = pitcherData.teamPercentileRanks || {};
                     pitcherRadarStats = pitcherData.radarStats || {};
@@ -211,7 +211,7 @@
                     text: '能力PR值雷達圖', 
                     left: 'center', 
                     textStyle: { fontSize: 14 },
-                    subtext: 'PR值: 百分位排名 (0-100), 虛線為賽季平均 (PR50)',
+                    subtext: 'PR值: 百分位排名 (0-100), 虛線為聯盟中位數 (PR50)',
                     subtextStyle: { fontSize: 11, color: '#999' }
                 },
                 tooltip: {
@@ -222,10 +222,10 @@
                             { en: 'OBP', zh: '上壘率', key: 'obp' },
                             { en: 'SLG', zh: '長打率', key: 'slg' },
                             { en: 'OPS', zh: 'OPS', key: 'ops' },
-                            { en: 'HR', zh: '全壘打', key: 'hr' },
                             { en: 'RBI', zh: '打點', key: 'rbi' },
                             { en: 'SO', zh: '三振', key: 'so' },
-                            { en: 'BB', zh: '保送', key: 'bb' }
+                            { en: 'BB', zh: '保送', key: 'bb' },
+                            { en: 'R', zh: '得分', key: 'r' }
                         ];
 
                         if (params.name === '球員PR值') {
@@ -233,9 +233,17 @@
                             statNames.forEach((stat) => {
                                 const prValue = batterPR[stat.en] || 0;
                                 const actualValue = batterRadarStats[stat.key] || 0;
-                                const formatValue = (stat.en === 'HR' || stat.en === 'RBI' || stat.en === 'SO' || stat.en === 'BB') 
-                                    ? actualValue.toFixed(0) 
-                                    : actualValue.toFixed(3);
+                                let formatValue;
+                                if (stat.en === 'SO' || stat.en === 'BB') {
+                                    formatValue = actualValue.toFixed(1) + '%';
+                                } else if (stat.en === 'RBI') {
+                                    formatValue = actualValue.toFixed(0);
+                                } else {
+                                    formatValue = actualValue.toFixed(3);
+                                }
+                                if (stat.en === 'R') {
+                                    formatValue = actualValue.toFixed(1) + '%';
+                                }
                                 result += `${stat.zh}(${stat.en}): ${formatValue} | PR${prValue.toFixed(1)}<br/>`;
                             });
                             return result;
@@ -244,19 +252,35 @@
                             statNames.forEach((stat) => {
                                 const avgValue = batterTeamAvg[stat.en] || 0;
                                 const prValue = batterTeamPR?.[stat.en] || 50;
-                                const formatValue = (stat.en === 'HR' || stat.en === 'RBI' || stat.en === 'SO' || stat.en === 'BB') 
-                                    ? avgValue.toFixed(0)
-                                    : avgValue.toFixed(3);
+                                let formatValue;
+                                if (stat.en === 'SO' || stat.en === 'BB') {
+                                    formatValue = avgValue.toFixed(1) + '%';
+                                } else if (stat.en === 'RBI') {
+                                    formatValue = avgValue.toFixed(0);
+                                } else {
+                                    formatValue = avgValue.toFixed(3);
+                                }
+                                if (stat.en === 'R') {
+                                    formatValue = avgValue.toFixed(1) + '%';
+                                }
                                 result += `${stat.zh}(${stat.en}): ${formatValue} | PR${prValue.toFixed(1)}<br/>`;
                             });
                             return result;
                         } else {
-                            let result = '<strong>賽季平均</strong><br/>';
+                            let result = '<strong>聯盟中位數</strong><br/>';
                             statNames.forEach((stat) => {
-                                const avgValue = batterSeasonAvg[stat.en] || 0;
-                                const formatValue = (stat.en === 'HR' || stat.en === 'RBI' || stat.en === 'SO' || stat.en === 'BB') 
-                                    ? avgValue.toFixed(0)
-                                    : avgValue.toFixed(3);
+                                const avgValue = batterMedianStats[stat.en] || 0;
+                                let formatValue;
+                                if (stat.en === 'SO' || stat.en === 'BB') {
+                                    formatValue = avgValue.toFixed(1) + '%';
+                                } else if (stat.en === 'RBI') {
+                                    formatValue = avgValue.toFixed(0);
+                                } else {
+                                    formatValue = avgValue.toFixed(3);
+                                }
+                                if (stat.en === 'R') {
+                                    formatValue = avgValue.toFixed(1) + '%';
+                                }
                                 result += `${stat.zh}(${stat.en}): ${formatValue}<br/>`;
                             });
                             return result;
@@ -265,7 +289,7 @@
                 },
                 legend: { 
                     top: 50,
-                    data: ['球員PR值', '隊伍平均', '賽季平均']
+                    data: ['球員PR值', '隊伍平均', '聯盟中位數']
                 },
                 radar: {
                     indicator: [
@@ -273,10 +297,10 @@
                         { name: 'OBP', max: 100 },
                         { name: 'SLG', max: 100 },
                         { name: 'OPS', max: 100 },
-                        { name: 'HR', max: 100 },
                         { name: 'RBI', max: 100 },
                         { name: 'SO(少為佳)', max: 100 },
-                        { name: 'BB', max: 100 }
+                        { name: 'BB', max: 100 },
+                        { name: 'R', max: 100 }
                     ],
                     center: ['50%', '58%'],
                     radius: '60%'
@@ -290,10 +314,10 @@
                                 batterPR.OBP || 0,
                                 batterPR.SLG || 0,
                                 batterPR.OPS || 0,
-                                batterPR.HR || 0,
                                 batterPR.RBI || 0,
                                 batterPR.SO || 0,
-                                batterPR.BB || 0
+                                batterPR.BB || 0,
+                                batterPR.R || 0
                             ],
                             name: '球員PR值',
                             areaStyle: { opacity: 0.3 },
@@ -306,10 +330,10 @@
                                 batterTeamPR?.OBP || 50,
                                 batterTeamPR?.SLG || 50,
                                 batterTeamPR?.OPS || 50,
-                                batterTeamPR?.HR || 50,
                                 batterTeamPR?.RBI || 50,
                                 batterTeamPR?.SO || 50,
-                                batterTeamPR?.BB || 50
+                                batterTeamPR?.BB || 50,
+                                batterTeamPR?.R || 50
                             ],
                             name: '隊伍平均',
                             lineStyle: { 
@@ -321,8 +345,8 @@
                             areaStyle: { opacity: 0 }
                         },
                         {
-                            value:  [50, 50, 50, 50, 50, 50, 50, 50],  // 賽季平均PR值 (50%)
-                            name: '賽季平均',
+                            value:  [50, 50, 50, 50, 50, 50, 50, 50],  // 聯盟中位數 (PR50)
+                            name: '聯盟中位數',
                             lineStyle: { 
                                 type: 'dashed',
                                 width: 1.5,
@@ -466,7 +490,7 @@
                     text: '能力PR值雷達圖', 
                     left: 'center', 
                     textStyle: { fontSize: 14 },
-                    subtext: 'PR值: 百分位排名 (0-100), 虛線為賽季平均 (PR50)',
+                    subtext: 'PR值: 百分位排名 (0-100), 虛線為聯盟中位數 (PR50)',
                     subtextStyle: { fontSize: 11, color: '#999' }
                 },
                 tooltip: {
@@ -505,9 +529,9 @@
                             });
                             return result;
                         } else {
-                            let result = '<strong>賽季平均</strong><br/>';
+                            let result = '<strong>聯盟中位數</strong><br/>';
                             statNames.forEach((stat) => {
-                                const avgValue = pitcherSeasonAvg[stat.en] || 0;
+                                const avgValue = pitcherMedianStats[stat.en] || 0;
                                 const formatValue = stat.en === 'SO' 
                                     ? avgValue.toFixed(0)
                                     : avgValue.toFixed(2);
@@ -519,7 +543,7 @@
                 },
                 legend: { 
                     top: 50,
-                    data: ['投手PR值', '隊伍平均', '賽季平均']
+                    data: ['投手PR值', '隊伍平均', '聯盟中位數']
                 },
                 radar: {
                     indicator: [
@@ -572,8 +596,8 @@
                             areaStyle: { opacity: 0 }
                         },
                         {
-                            value: [50, 50, 50, 50, 50, 50, 50], // 賽季平均PR值 (50%)
-                            name: '賽季平均',
+                            value: [50, 50, 50, 50, 50, 50, 50], // 聯盟中位數 (PR50)
+                            name: '聯盟中位數',
                             lineStyle: { 
                                 type: 'dashed',
                                 width: 1.5,
