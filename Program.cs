@@ -45,6 +45,24 @@ builder.Services.AddHostedService<BaseballApp.BackgroundServices.RankingCacheUpd
 
 var app = builder.Build();
 
+// 自動執行資料庫 Migration（部署到雲端時自動建表）
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    try
+    {
+        var context = services.GetRequiredService<BaseballDbContext>();
+        // 自動套用 pending migrations（如果資料表不存在會自動建立）
+        await context.Database.MigrateAsync();
+        Console.WriteLine("✓ 資料庫 Migration 完成");
+    }
+    catch (Exception ex)
+    {
+        var logger = services.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "資料庫 Migration 執行時發生錯誤");
+    }
+}
+
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
