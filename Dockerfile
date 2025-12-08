@@ -22,4 +22,7 @@ EXPOSE 10000
 # 複製建置結果
 COPY --from=build /app/publish .
 
+# 複製 SQLite 資料庫（用於首次部署時資料遷移）
+COPY --from=build /src/data ./data
+
 ENTRYPOINT ["dotnet", "BaseballApp.dll"]
