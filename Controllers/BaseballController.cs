@@ -2,6 +2,7 @@ using BaseballApp.Models;
 using BaseballApp.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace BaseballApp.Controllers;
 
@@ -10,15 +11,18 @@ public class BaseballController : Controller
     private readonly IBaseballDbService _baseballDbService;
     private readonly IRankingCacheService _rankingCacheService;
     private readonly ILogger<BaseballController> _logger;
+    private readonly IServiceScopeFactory _scopeFactory;
 
     public BaseballController(
         IBaseballDbService baseballDbService,
         IRankingCacheService rankingCacheService,
-        ILogger<BaseballController> logger)
+        ILogger<BaseballController> logger,
+        IServiceScopeFactory scopeFactory)
     {
         _baseballDbService = baseballDbService;
         _rankingCacheService = rankingCacheService;
         _logger = logger;
+        _scopeFactory = scopeFactory;
     }
 
     /// <summary>
@@ -735,7 +739,9 @@ public class BaseballController : Controller
             {
                 try
                 {
-                    await _rankingCacheService.UpdateBattingRankingsAsync(vm.SeasonId);
+                    using var scope = _scopeFactory.CreateScope();
+                    var rankingCacheService = scope.ServiceProvider.GetRequiredService<IRankingCacheService>();
+                    await rankingCacheService.UpdateBattingRankingsAsync(vm.SeasonId);
                 }
                 catch (Exception ex)
                 {
@@ -850,7 +856,9 @@ public class BaseballController : Controller
             {
                 try
                 {
-                    await _rankingCacheService.UpdatePitchingRankingsAsync(vm.SeasonId);
+                    using var scope = _scopeFactory.CreateScope();
+                    var rankingCacheService = scope.ServiceProvider.GetRequiredService<IRankingCacheService>();
+                    await rankingCacheService.UpdatePitchingRankingsAsync(vm.SeasonId);
                 }
                 catch (Exception ex)
                 {
