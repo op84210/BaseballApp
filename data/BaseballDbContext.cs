@@ -1,4 +1,5 @@
 using BaseballApp.Models;
+using BaseballApp.Models.Codes;
 using Microsoft.EntityFrameworkCore;
 
 namespace BaseballApp.Data;
@@ -16,6 +17,19 @@ public class BaseballDbContext : DbContext
     public DbSet<Batter> Batters { get; set; }
     public DbSet<Pitcher> Pitchers { get; set; }
     public DbSet<PlayerTeam> PlayerTeams { get; set; }
+
+    public DbSet<TeamGameStats> TeamGameStats { get; set; }
+    public DbSet<TeamSeasonRankingCache> TeamSeasonRankingCaches { get; set; }
+
+    // 代碼資料表
+    public DbSet<CodeBases> CodeBases { get; set; }
+    public DbSet<CodePitchCode> CodePitchCodes { get; set; }
+    public DbSet<CodeEventType> CodeEventTypes { get; set; }
+    public DbSet<CodePitchType> CodePitchTypes { get; set; }
+    public DbSet<CodeRunnerType> CodeRunnerTypes { get; set; }
+    public DbSet<CodeResult> CodeResults { get; set; }
+    public DbSet<CodeTrajectory> CodeTrajectories { get; set; }
+    public DbSet<CodeHardness> CodeHardnesses { get; set; }
 
     // 比賽相關資料表
     public DbSet<Game> Games { get; set; }
@@ -404,6 +418,144 @@ public class BaseballDbContext : DbContext
             entity.HasIndex(e => new { e.SeasonId, e.PlayerId }).IsUnique();
             // 建立索引：seasonId + rank
             entity.HasIndex(e => new { e.SeasonId, e.Rank });
+        });
+
+        // tblTeamGameStats
+        modelBuilder.Entity<TeamGameStats>(entity =>
+        {
+            entity.ToTable("tblTeamGameStats");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id").ValueGeneratedOnAdd();
+            entity.Property(e => e.SeasonId).HasColumnName("seasonId");
+            entity.Property(e => e.GameId).HasColumnName("gameId");
+            entity.Property(e => e.GameDate).HasColumnName("gameDate");
+            entity.Property(e => e.TeamId).HasColumnName("teamId");
+            entity.Property(e => e.TeamName).HasColumnName("teamName");
+            entity.Property(e => e.OpponentTeamId).HasColumnName("opponentTeamId");
+            entity.Property(e => e.OpponentTeamName).HasColumnName("opponentTeamName");
+            entity.Property(e => e.IsHome).HasColumnName("isHome");
+            entity.Property(e => e.TeamScore).HasColumnName("teamScore");
+            entity.Property(e => e.OpponentScore).HasColumnName("opponentScore");
+            entity.Property(e => e.PA).HasColumnName("pa");
+            entity.Property(e => e.AB).HasColumnName("ab");
+            entity.Property(e => e.H).HasColumnName("h");
+            entity.Property(e => e.TwoB).HasColumnName("twoB");
+            entity.Property(e => e.ThreeB).HasColumnName("threeB");
+            entity.Property(e => e.HR).HasColumnName("hr");
+            entity.Property(e => e.BB).HasColumnName("bb");
+            entity.Property(e => e.SO).HasColumnName("so");
+            entity.Property(e => e.HBP).HasColumnName("hbp");
+            entity.Property(e => e.SF).HasColumnName("sf");
+            entity.Property(e => e.SB).HasColumnName("sb");
+            entity.Property(e => e.CS).HasColumnName("cs");
+            entity.Property(e => e.IPOuts).HasColumnName("ipOuts");
+            entity.Property(e => e.ER).HasColumnName("er");
+            entity.Property(e => e.HitsAllowed).HasColumnName("hitsAllowed");
+            entity.Property(e => e.BbAllowed).HasColumnName("bbAllowed");
+            entity.Property(e => e.SoPitching).HasColumnName("soPitching");
+            entity.Property(e => e.HrAllowed).HasColumnName("hrAllowed");
+            entity.Property(e => e.CreatedAt).HasColumnName("createdAt");
+            entity.HasIndex(e => new { e.GameId, e.TeamId }).IsUnique();
+        });
+
+        // tblTeamSeasonRankingCache
+        modelBuilder.Entity<TeamSeasonRankingCache>(entity =>
+        {
+            entity.ToTable("tblTeamSeasonRankingCache");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id").ValueGeneratedOnAdd();
+            entity.Property(e => e.SeasonId).HasColumnName("seasonId");
+            entity.Property(e => e.TeamId).HasColumnName("teamId");
+            entity.Property(e => e.TeamName).HasColumnName("teamName");
+            entity.Property(e => e.Rank).HasColumnName("rank");
+            entity.Property(e => e.GamesPlayed).HasColumnName("gamesPlayed");
+            entity.Property(e => e.Wins).HasColumnName("wins");
+            entity.Property(e => e.Losses).HasColumnName("losses");
+            entity.Property(e => e.RunsScored).HasColumnName("runsScored");
+            entity.Property(e => e.RunsAllowed).HasColumnName("runsAllowed");
+            entity.Property(e => e.PA).HasColumnName("pa");
+            entity.Property(e => e.AB).HasColumnName("ab");
+            entity.Property(e => e.H).HasColumnName("h");
+            entity.Property(e => e.TwoB).HasColumnName("twoB");
+            entity.Property(e => e.ThreeB).HasColumnName("threeB");
+            entity.Property(e => e.HR).HasColumnName("hr");
+            entity.Property(e => e.BB).HasColumnName("bb");
+            entity.Property(e => e.SO).HasColumnName("so");
+            entity.Property(e => e.HBP).HasColumnName("hbp");
+            entity.Property(e => e.SF).HasColumnName("sf");
+            entity.Property(e => e.SB).HasColumnName("sb");
+            entity.Property(e => e.CS).HasColumnName("cs");
+            entity.Property(e => e.AVG).HasColumnName("avg").HasColumnType("decimal(5,3)");
+            entity.Property(e => e.OBP).HasColumnName("obp").HasColumnType("decimal(5,3)");
+            entity.Property(e => e.SLG).HasColumnName("slg").HasColumnType("decimal(5,3)");
+            entity.Property(e => e.OPS).HasColumnName("ops").HasColumnType("decimal(5,3)");
+            entity.HasIndex(e => new { e.SeasonId, e.TeamId });
+            entity.HasIndex(e => new { e.SeasonId, e.Rank });
+        });
+
+        // Code tables
+        modelBuilder.Entity<CodeBases>(entity =>
+        {
+            entity.ToTable("tblCodeBases");
+            entity.HasKey(e => e.Code);
+            entity.Property(e => e.Code).HasColumnName("code");
+            entity.Property(e => e.Name).HasColumnName("name");
+        });
+
+        modelBuilder.Entity<CodePitchCode>(entity =>
+        {
+            entity.ToTable("tblCodePitchCode");
+            entity.HasKey(e => e.Code);
+            entity.Property(e => e.Code).HasColumnName("code");
+            entity.Property(e => e.Name).HasColumnName("name");
+        });
+
+        modelBuilder.Entity<CodeEventType>(entity =>
+        {
+            entity.ToTable("tblCodeEventType");
+            entity.HasKey(e => e.Code);
+            entity.Property(e => e.Code).HasColumnName("code");
+            entity.Property(e => e.Name).HasColumnName("name");
+        });
+
+        modelBuilder.Entity<CodePitchType>(entity =>
+        {
+            entity.ToTable("tblCodePitchType");
+            entity.HasKey(e => e.Code);
+            entity.Property(e => e.Code).HasColumnName("code");
+            entity.Property(e => e.Name).HasColumnName("name");
+        });
+
+        modelBuilder.Entity<CodeRunnerType>(entity =>
+        {
+            entity.ToTable("tblCodeRunnerType");
+            entity.HasKey(e => e.Code);
+            entity.Property(e => e.Code).HasColumnName("code");
+            entity.Property(e => e.Name).HasColumnName("name");
+        });
+
+        modelBuilder.Entity<CodeResult>(entity =>
+        {
+            entity.ToTable("tblCodeResult");
+            entity.HasKey(e => e.Code);
+            entity.Property(e => e.Code).HasColumnName("code");
+            entity.Property(e => e.Name).HasColumnName("name");
+        });
+
+        modelBuilder.Entity<CodeTrajectory>(entity =>
+        {
+            entity.ToTable("tblCodeTrajectory");
+            entity.HasKey(e => e.Code);
+            entity.Property(e => e.Code).HasColumnName("code");
+            entity.Property(e => e.Name).HasColumnName("name");
+        });
+
+        modelBuilder.Entity<CodeHardness>(entity =>
+        {
+            entity.ToTable("tblCodeHardness");
+            entity.HasKey(e => e.Code);
+            entity.Property(e => e.Code).HasColumnName("code");
+            entity.Property(e => e.Name).HasColumnName("name");
         });
     }
 }
