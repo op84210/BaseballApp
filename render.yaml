@@ -1,0 +1,32 @@
+services:
+  # PostgreSQL 資料庫
+  - type: pserv
+    name: baseball-db
+    plan: free
+    ipAddress: private
+    databaseName: baseball
+    user: postgres
+    region: singapore
+
+  # Web 應用
+  - type: web
+    name: baseball-app
+    plan: free
+    runtime: docker
+    region: singapore
+    buildCommand: "" # Dockerfile 會自動偵測
+    startCommand: "" # ENTRYPOINT 已在 Dockerfile 中定義
+    
+    # 環境變數
+    envVars:
+      - key: DatabaseType
+        value: PostgreSQL
+      - key: ConnectionStrings__PostgreSQL
+        fromDatabase:
+          name: baseball-db
+          property: connectionString
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+    
+    # 自動部署（GitHub 連接後）
+    autoDeploy: true
