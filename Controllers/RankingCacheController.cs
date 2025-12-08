@@ -33,7 +33,10 @@ public class RankingCacheController : ControllerBase
         var teams = await _context.Teams.CountAsync();
         var batters = await _context.Batters.CountAsync();
         var pitchers = await _context.Pitchers.CountAsync();
-        return Ok(new { seasons, teams, batters, pitchers });
+        var batterBoxes = await _context.BatterBoxes.CountAsync();
+        var pitcherBoxes = await _context.PitcherBoxes.CountAsync();
+        var playerTeams = await _context.PlayerTeams.CountAsync();
+        return Ok(new { seasons, teams, batters, pitchers, batterBoxes, pitcherBoxes, playerTeams });
     }
 
     /// <summary>
