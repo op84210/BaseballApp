@@ -149,6 +149,9 @@ static async Task CopyTable<T>(string tableName, BaseballDbContext sourceCtx, Ba
     var data = await getDbSet(sourceCtx).AsNoTracking().ToListAsync();
     if (data.Any())
     {
+        // 轉換所有 DateTime 為 UTC（解決 PostgreSQL 時區問題）
+        ConvertDateTimesToUtc(data);
+        
         getDbSet(destCtx).AddRange(data);
         await destCtx.SaveChangesAsync();
         logger.LogInformation($"  ✓ {tableName}: {data.Count} rows");
@@ -161,6 +164,9 @@ static async Task CopyTableBatched<T>(string tableName, BaseballDbContext source
     var data = await getDbSet(sourceCtx).AsNoTracking().ToListAsync();
     if (data.Any())
     {
+        // 轉換所有 DateTime 為 UTC（解決 PostgreSQL 時區問題）
+        ConvertDateTimesToUtc(data);
+        
         const int batchSize = 500;
         
         for (int i = 0; i < data.Count; i += batchSize)
@@ -172,6 +178,39 @@ static async Task CopyTableBatched<T>(string tableName, BaseballDbContext source
         }
         
         logger.LogInformation($"  ✓ {tableName}: {data.Count} rows");
+    }
+}
+
+static void ConvertDateTimesToUtc<T>(List<T> entities) where T : class
+{
+    foreach (var entity in entities)
+    {
+        var properties = typeof(T).GetProperties();
+        foreach (var prop in properties)
+        {
+            if (prop.PropertyType == typeof(DateTime))
+            {
+                var value = (DateTime?)prop.GetValue(entity);
+                if (value.HasValue && value.Value.Kind != DateTimeKind.Utc)
+                {
+                    var utcValue = value.Value.Kind == DateTimeKind.Unspecified
+                        ? DateTime.SpecifyKind(value.Value, DateTimeKind.Utc)
+                        : value.Value.ToUniversalTime();
+                    prop.SetValue(entity, utcValue);
+                }
+            }
+            else if (prop.PropertyType == typeof(DateTime?))
+            {
+                var value = (DateTime?)prop.GetValue(entity);
+                if (value.HasValue && value.Value.Kind != DateTimeKind.Utc)
+                {
+                    var utcValue = value.Value.Kind == DateTimeKind.Unspecified
+                        ? DateTime.SpecifyKind(value.Value, DateTimeKind.Utc)
+                        : value.Value.ToUniversalTime();
+                    prop.SetValue(entity, utcValue);
+                }
+            }
+        }
     }
 }
 
