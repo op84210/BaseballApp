@@ -1,5 +1,7 @@
+using BaseballApp.Data;
 using BaseballApp.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace BaseballApp.Controllers;
 
@@ -8,14 +10,30 @@ namespace BaseballApp.Controllers;
 public class RankingCacheController : ControllerBase
 {
     private readonly IRankingCacheService _rankingCacheService;
+    private readonly BaseballDbContext _context;
     private readonly ILogger<RankingCacheController> _logger;
 
     public RankingCacheController(
         IRankingCacheService rankingCacheService,
+        BaseballDbContext context,
         ILogger<RankingCacheController> logger)
     {
         _rankingCacheService = rankingCacheService;
+        _context = context;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// 健康檢查：回傳關鍵資料表筆數
+    /// </summary>
+    [HttpGet("health")]
+    public async Task<IActionResult> Health()
+    {
+        var seasons = await _context.Seasons.CountAsync();
+        var teams = await _context.Teams.CountAsync();
+        var batters = await _context.Batters.CountAsync();
+        var pitchers = await _context.Pitchers.CountAsync();
+        return Ok(new { seasons, teams, batters, pitchers });
     }
 
     /// <summary>
