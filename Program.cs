@@ -77,25 +77,17 @@ using (var scope = app.Services.CreateScope())
         // 如果是 PostgreSQL 且資料庫為空，自動從 SQLite 匯入資料
         if (databaseType.ToUpper() == "POSTGRESQL")
         {
-            // 使用 information_schema 檢查表是否存在和有資料（適配 PostgreSQL 的小寫表名）
+            // 檢查 tblseason 表是否存在並有資料
             var hasData = false;
             try
             {
-                var result = await context.Database.ExecuteScalarAsync<long>(
-                    @"SELECT COUNT(*) FROM information_schema.tables 
-                      WHERE table_schema = 'public' AND table_name = 'tblseason'");
-                
-                if (result > 0)
-                {
-                    // 表存在，檢查是否有資料
-                    var rowCount = await context.Database.ExecuteScalarAsync<long>(
-                        "SELECT COUNT(*) FROM tblseason");
-                    hasData = rowCount > 0;
-                }
+                // 嘗試查詢表中的記錄數
+                var seasonCount = await context.Seasons.CountAsync();
+                hasData = seasonCount > 0;
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "檢查 PostgreSQL 資料時出錯");
+                logger.LogWarning(ex, "檢查 tblseason 時發生錯誤，嘗試重新建立表結構");
             }
 
             if (!hasData)
