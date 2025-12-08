@@ -137,6 +137,7 @@ static async Task MigrateDataFromSQLite(BaseballDbContext pgContext, string sqli
         await CopyTable("Stadiums", sqliteContext, pgContext, ctx => ctx.Stadiums, logger);
         await CopyTable("Batters", sqliteContext, pgContext, ctx => ctx.Batters, logger);
         await CopyTable("Pitchers", sqliteContext, pgContext, ctx => ctx.Pitchers, logger);
+        await CopyTable("PlayerTeams", sqliteContext, pgContext, ctx => ctx.PlayerTeams, logger);
         
         // 比賽資料（分批）
         await CopyTableBatched("Games", sqliteContext, pgContext, ctx => ctx.Games, logger);
