@@ -3,9 +3,6 @@ services:
   - type: pserv
     name: baseball-db
     plan: free
-    ipAddress: private
-    databaseName: baseball
-    user: postgres
     region: singapore
 
   # Web 應用
@@ -14,8 +11,6 @@ services:
     plan: free
     runtime: docker
     region: singapore
-    buildCommand: "" # Dockerfile 會自動偵測
-    startCommand: "" # ENTRYPOINT 已在 Dockerfile 中定義
     
     # 環境變數
     envVars:
