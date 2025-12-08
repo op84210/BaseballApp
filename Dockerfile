@@ -15,8 +15,12 @@ RUN dotnet publish BaseballApp.csproj -c Release -o /app/publish --no-restore
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime
 WORKDIR /app
 
-# 監聽埠號（Render 會自動綁定 PORT 環境變數，預設 10000）
+# 設定生產環境以禁用檔案監視和熱重載
+ENV ASPNETCORE_ENVIRONMENT=Production
 ENV ASPNETCORE_URLS=http://+:10000
+ENV DOTNET_HOSTBUILDER__RELOADEVENTHANDLER__ENABLED=false
+ENV ASPNETCORE_HOSTOPTIONS__SHUTDOWNTIMEOUT=30
+
 EXPOSE 10000
 
 # 複製建置結果

@@ -3,11 +3,18 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 修正 Render 部署問題：停用檔案監視
+// 禁用檔案系統監視（解決 Render 部署的 inotify 限制問題）
 builder.Configuration.Sources
     .OfType<Microsoft.Extensions.Configuration.Json.JsonConfigurationSource>()
     .ToList()
     .ForEach(s => s.ReloadOnChange = false);
+
+// 禁用物理檔案提供者的檔案監視
+if (!builder.Environment.IsDevelopment())
+{
+    builder.Services.AddSingleton<Microsoft.Extensions.FileProviders.IFileProvider>(
+        new Microsoft.Extensions.FileProviders.NullFileProvider());
+}
 
 // Add services to the container.
 builder.Services.AddControllersWithViews();
