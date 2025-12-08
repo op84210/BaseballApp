@@ -40,7 +40,10 @@ switch (databaseType.ToUpper())
     
     case "POSTGRESQL":
         builder.Services.AddDbContext<BaseballDbContext>(options =>
-            options.UseNpgsql(builder.Configuration.GetConnectionString("PostgreSQL")));
+            options.UseNpgsql(
+                builder.Configuration.GetConnectionString("PostgreSQL"),
+                npgsqlOptions => npgsqlOptions.UseRelationalNulls(true)
+            ));
         break;
     
     default:
@@ -74,7 +77,27 @@ using (var scope = app.Services.CreateScope())
         // 如果是 PostgreSQL 且資料庫為空，自動從 SQLite 匯入資料
         if (databaseType.ToUpper() == "POSTGRESQL")
         {
-            var hasData = await context.Seasons.AnyAsync();
+            // 使用 information_schema 檢查表是否存在和有資料（適配 PostgreSQL 的小寫表名）
+            var hasData = false;
+            try
+            {
+                var result = await context.Database.ExecuteScalarAsync<long>(
+                    @"SELECT COUNT(*) FROM information_schema.tables 
+                      WHERE table_schema = 'public' AND table_name = 'tblseason'");
+                
+                if (result > 0)
+                {
+                    // 表存在，檢查是否有資料
+                    var rowCount = await context.Database.ExecuteScalarAsync<long>(
+                        "SELECT COUNT(*) FROM tblseason");
+                    hasData = rowCount > 0;
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "檢查 PostgreSQL 資料時出錯");
+            }
+
             if (!hasData)
             {
                 logger.LogInformation("PostgreSQL 資料庫為空，開始從 SQLite 匯入資料...");

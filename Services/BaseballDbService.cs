@@ -210,12 +210,16 @@ public class BaseballDbService : IBaseballDbService
     {
         try
         {
+            _logger.LogInformation($"GetAllBattersAsync called with seasonId={seasonId}, teamId={teamId}");
+            
             // 依據賽季篩選：取得該賽季有出賽的打者
             var batterIds = await _context.BatterBoxes
                 .Where(bb => bb.SeasonId == seasonId || seasonId == "ALL")
                 .Select(bb => bb.PlayerId)
                 .Distinct()
                 .ToListAsync();
+
+            _logger.LogInformation($"Found {batterIds.Count} unique batterIds for season {seasonId}");
 
             var query = _context.Batters
                 .Include(b => b.PlayerTeams)
@@ -230,6 +234,7 @@ public class BaseballDbService : IBaseballDbService
 
             // 依據背號排序
             var results = await query.ToListAsync();
+            _logger.LogInformation($"Returning {results.Count} batters");
             return results
                 .OrderBy(b => int.TryParse(b.PlayerNumber, out var num) ? num : 999)
                 .ToList();
