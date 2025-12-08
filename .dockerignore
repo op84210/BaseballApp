@@ -5,9 +5,10 @@
 **/.vscode/
 **/*.user
 **/*.suo
-**/*.db
 **/*.db-shm
 **/*.db-wal
+# Don't ignore data/baseball.db - needed for migration
+!data/baseball.db
 **/node_modules/
 **/.git/
 **/.github/
