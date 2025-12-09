@@ -11,6 +11,10 @@ namespace BaseballApp.Controllers
         private readonly BaseballDbContext _context;
         private readonly ILogger<DataMigrationController> _logger;
         private readonly IConfiguration _configuration;
+        private static bool _isRunning = false;
+        private static string _status = "idle";
+        private static string _lastError = "";
+        private static DateTime? _lastRunTime = null;
 
         public DataMigrationController(BaseballDbContext context, ILogger<DataMigrationController> logger, IConfiguration configuration)
         {
@@ -20,50 +24,81 @@ namespace BaseballApp.Controllers
         }
 
         /// <summary>
-        /// 清空並重建資料庫（從 SQLite 遷移到 PostgreSQL）
+        /// 清空並重建資料庫（從 SQLite 遷移到 PostgreSQL）- 背景執行
         /// </summary>
         [HttpPost("rebuild")]
-        public async Task<IActionResult> RebuildDatabase()
+        public IActionResult RebuildDatabase()
         {
-            try
+            if (_isRunning)
             {
-                _logger.LogInformation("開始清空並重建資料庫...");
-                Console.WriteLine("🔄 清空並重建資料庫...");
-
-                var databaseType = _configuration.GetValue<string>("DatabaseType") ?? "SQLite";
-
-                if (databaseType.ToUpper() != "POSTGRESQL")
-                {
-                    return BadRequest(new { message = "此功能僅適用於 PostgreSQL 資料庫" });
-                }
-
-                // 清空所有資料表（按相反順序以避免外鍵約束問題）
-                await ClearAllTables();
-                Console.WriteLine("✓ 已清空所有資料表");
-
-                // 重建資料（從 SQLite 匯入）
-                var sqlitePath = Path.Combine(AppContext.BaseDirectory, "data", "baseball.db");
-                if (!System.IO.File.Exists(sqlitePath))
-                {
-                    return NotFound(new { message = $"找不到 SQLite 資料庫: {sqlitePath}" });
-                }
-
-                await MigrateDataFromSQLite(sqlitePath);
-                Console.WriteLine("✓ 資料遷移完成");
-
-                // 返回資料統計
-                var stats = await GetDatabaseStats();
-                return Ok(new
-                {
-                    message = "資料庫重建成功",
-                    stats = stats
-                });
+                return Conflict(new { message = "資料遷移正在進行中", status = _status });
             }
-            catch (Exception ex)
+
+            var databaseType = _configuration.GetValue<string>("DatabaseType") ?? "SQLite";
+            if (databaseType.ToUpper() != "POSTGRESQL")
             {
-                _logger.LogError(ex, "資料庫重建失敗");
-                return StatusCode(500, new { message = "資料庫重建失敗", error = ex.Message });
+                return BadRequest(new { message = "此功能僅適用於 PostgreSQL 資料庫" });
             }
+
+            // 背景執行
+            _ = Task.Run(async () =>
+            {
+                _isRunning = true;
+                _status = "starting";
+                _lastError = "";
+                
+                try
+                {
+                    _logger.LogInformation("開始清空並重建資料庫...");
+                    Console.WriteLine("🔄 清空並重建資料庫...");
+
+                    _status = "clearing tables";
+                    await ClearAllTables();
+                    Console.WriteLine("✓ 已清空所有資料表");
+
+                    _status = "migrating data";
+                    var sqlitePath = Path.Combine(AppContext.BaseDirectory, "data", "baseball.db");
+                    if (!System.IO.File.Exists(sqlitePath))
+                    {
+                        _lastError = $"找不到 SQLite 資料庫: {sqlitePath}";
+                        _status = "error";
+                        return;
+                    }
+
+                    await MigrateDataFromSQLite(sqlitePath);
+                    Console.WriteLine("✓ 資料遷移完成");
+
+                    _status = "completed";
+                    _lastRunTime = DateTime.UtcNow;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "資料庫重建失敗");
+                    _lastError = ex.Message;
+                    _status = "error";
+                }
+                finally
+                {
+                    _isRunning = false;
+                }
+            });
+
+            return Accepted(new { message = "資料遷移已啟動，請使用 /api/datamigration/status 查詢進度" });
+        }
+
+        /// <summary>
+        /// 查詢資料遷移狀態
+        /// </summary>
+        [HttpGet("status")]
+        public IActionResult GetMigrationStatus()
+        {
+            return Ok(new
+            {
+                isRunning = _isRunning,
+                status = _status,
+                lastError = _lastError,
+                lastRunTime = _lastRunTime
+            });
         }
 
         /// <summary>
