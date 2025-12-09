@@ -114,7 +114,7 @@ namespace BaseballApp.Controllers
             // 清空順序很重要（按外鍵依賴關係）
             await _context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE \"tblEvent\" CASCADE");
             await _context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE \"tblRunner\" CASCADE");
-            await _context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE \"tblScore\" CASCADE");
+            await _context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE \"tblScores\" CASCADE");
             await _context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE \"tblBatterBox\" CASCADE");
             await _context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE \"tblPitcherBox\" CASCADE");
             await _context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE \"tblPA\" CASCADE");
