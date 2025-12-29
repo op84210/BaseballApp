@@ -39,16 +39,23 @@ public class BaseballController : Controller
         try
         {
             var teams = await _baseballDbService.GetAllTeamsAsync(seasonId);
-            var games = await _baseballDbService.GetGamesAsync(seasonId);
+            var gameResults = await _baseballDbService.GetGameResultsAsync(seasonId);
+            var standings = await _baseballDbService.GetTeamStandingsAsync(seasonId);
+            var seasons = await GetSeasonOptions(seasonId);
 
-            var teamStats = teams.Select(team => new
+            // 計算圖表資料與時間序列
+            var chartData = BuildChartData(gameResults, teams);
+
+            var viewModel = new TeamsViewModel
             {
-                Team = team,
-                Games = games.Count(g => g.AwayTeamId == team.TeamId || g.HomeTeamId == team.TeamId)
-            }).ToList();
+                SeasonId = seasonId,
+                SeasonOptions = seasons,
+                Teams = teams.Select(t => new TeamCardViewModel { /* ... */ }).ToList(),
+                ChartData = chartData,
+                Standings = standings.Select(s => new TeamStandingViewModel { /* ... */ }).ToList()
+            };
 
-            ViewBag.SeasonId = seasonId;
-            return View(teamStats);
+            return View(viewModel);
         }
         catch (Exception ex)
         {
@@ -180,42 +187,8 @@ public class BaseballController : Controller
                 players.AddRange(pitchers);
             }
             
-            var teams = await _baseballDbService.GetAllTeamsAsync(seasonId);
-            var seasons = await _baseballDbService.GetAllSeasonsAsync();
-
-            var seasonOptions = seasons
-                .OrderByDescending(s => s.SeasonId)
-                .Select(s => new SelectListItem
-                {
-                    Value = s.SeasonId,
-                    Text = s.SeasonName ?? s.SeasonId,
-                    Selected = (s.SeasonId == seasonId)
-                })
-                .ToList();
-
-            seasonOptions.Insert(0, new SelectListItem
-            {
-                Value = "ALL",
-                Text = "全部賽季",
-                Selected = (seasonId == "ALL")
-            });
-
-            var teamOptions = teams
-                .OrderBy(t => t.TeamName)
-                .Select(t => new SelectListItem
-                {
-                    Value = t.TeamId,
-                    Text = t.TeamName,
-                    Selected = (t.TeamId == teamId)
-                })
-                .ToList();
-
-            teamOptions.Insert(0, new SelectListItem
-            {
-                Value = "",
-                Text = "全部球隊",
-                Selected = string.IsNullOrEmpty(teamId)
-            });
+            var seasonOptions = await GetSeasonOptions(seasonId);
+            var teamOptions = await GetTeamOptions(seasonId, teamId);
 
             var vm = new PlayersViewModel
             {
@@ -235,6 +208,64 @@ public class BaseballController : Controller
             _logger.LogError(ex, "載入球員頁面時發生錯誤");
             return View("Error");
         }
+    }
+
+    /// <summary>
+    /// 取得賽季下拉選單項目
+    /// </summary>
+    private async Task<List<SelectListItem>> GetSeasonOptions(string seasonId)
+    {
+        try
+        {
+            var seasons = await _baseballDbService.GetAllSeasonsAsync();
+
+            var seasonOptions = seasons
+                .OrderByDescending(s => s.SeasonId)
+                .Select(s => new SelectListItem
+                {
+                    Value = s.SeasonId,
+                    Text = s.SeasonName ?? s.SeasonId,
+                    Selected = (s.SeasonId == seasonId)
+                })
+                .ToList();
+
+            seasonOptions.Insert(0, new SelectListItem
+            {
+                Value = "ALL",
+                Text = "全部賽季",
+                Selected = (seasonId == "ALL")
+            });
+
+            return seasonOptions;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "取得賽季下拉選單項目時發生錯誤");
+            return new List<SelectListItem>();
+        }
+    }
+
+    private async Task<List<SelectListItem>> GetTeamOptions(string seasonId, string teamId)
+    {
+        var teams = await _baseballDbService.GetAllTeamsAsync(seasonId);
+        var teamOptions = teams
+            .OrderBy(t => t.TeamName)
+            .Select(t => new SelectListItem
+            {
+                Value = t.TeamId,
+                Text = t.TeamName,
+                Selected = (t.TeamId == teamId)
+            })
+            .ToList();
+
+        teamOptions.Insert(0, new SelectListItem
+        {
+            Value = "",
+            Text = "全部球隊",
+            Selected = string.IsNullOrEmpty(teamId)
+        });
+
+        return teamOptions;
     }
 
     /// <summary>
@@ -460,9 +491,16 @@ public class BaseballController : Controller
         var seasonsDict = (await _baseballDbService.GetAllSeasonsAsync()).ToDictionary(s => s.SeasonId, s => s.SeasonName ?? s.SeasonId);
         var pitcherTeam = pitcher.PlayerTeams.FirstOrDefault()?.TeamId;
 
+        // 取得投手投球事件資料
+        var pitcherEvents = await _baseballDbService.GetPitcherEventsAsync(playerId, seasonId);
+
         // 建立投手每場統計與最佳投手表現
         var pitcherGameStats = BuildPitcherGameStats(pitcherBoxes.ToList(), playerId, seasonsDict, pitcherTeam);
         var bestPitchingPerformances = BuildBestPitchingPerformances(pitcherGameStats);
+
+        // 建立球種統計與球速統計
+        var pitchTypeStats = BuildPitchTypeStats(pitcherEvents);
+        var velocityStats = BuildVelocityStats(pitcherEvents);
 
         // 回傳投手詳細資料模型
         return new PitcherDetailModel
@@ -471,7 +509,9 @@ public class BaseballController : Controller
             Stats = new PitcherStats
             {
                 GameStats = pitcherGameStats,
-                BestPerformances = bestPitchingPerformances
+                BestPerformances = bestPitchingPerformances,
+                PitchTypeStats = pitchTypeStats,
+                VelocityStats = velocityStats
             }
         };
     }
@@ -564,6 +604,110 @@ public class BaseballController : Controller
             .OrderByDescending(x => x.Score)
             .Take(5)
             .ToList();
+    }
+
+    /// <summary>
+    /// 建立球種使用統計
+    /// </summary>
+    /// <param name="pitcherEvents">
+    /// 投手投球事件列表
+    /// </param>
+    /// <returns>
+    /// 球種統計列表
+    /// </returns>
+    private List<PitchTypeStat> BuildPitchTypeStats(IEnumerable<Event> pitcherEvents)
+    {
+        var pitchTypeGroups = pitcherEvents
+            .Where(e => !string.IsNullOrEmpty(e.PitchType))
+            .GroupBy(e => e.PitchType)
+            .Select(g => new
+            {
+                PitchType = g.Key,
+                Count = g.Count(),
+                AverageVelocity = g.Where(e => e.Velocity.HasValue).Any() 
+                    ? g.Where(e => e.Velocity.HasValue).Average(e => e.Velocity.Value) 
+                    : 0m
+            })
+            .ToList();
+
+        var totalPitches = pitchTypeGroups.Sum(g => g.Count);
+
+        return pitchTypeGroups
+            .Select(g => new PitchTypeStat
+            {
+                PitchType = g.PitchType ?? "",
+                PitchTypeName = GetPitchTypeName(g.PitchType ?? ""),
+                Count = g.Count,
+                UsagePercentage = totalPitches > 0 ? Math.Round((decimal)g.Count / totalPitches * 100, 1) : 0,
+                AverageVelocity = Math.Round(g.AverageVelocity, 1)
+            })
+            .OrderByDescending(x => x.UsagePercentage)
+            .ToList();
+    }
+
+    /// <summary>
+    /// 建立球速統計
+    /// </summary>
+    /// <param name="pitcherEvents">
+    /// 投手投球事件列表
+    /// </param>
+    /// <returns>
+    /// 球速統計
+    /// </returns>
+    private VelocityStat BuildVelocityStats(IEnumerable<Event> pitcherEvents)
+    {
+        var velocities = pitcherEvents
+            .Where(e => e.Velocity.HasValue)
+            .Select(e => e.Velocity.Value)
+            .ToList();
+
+        if (!velocities.Any())
+        {
+            return new VelocityStat();
+        }
+
+        var avgVelocity = velocities.Average();
+        var maxVelocity = velocities.Max();
+        var minVelocity = velocities.Min();
+        var variance = velocities.Sum(v => Math.Pow((double)(v - avgVelocity), 2)) / velocities.Count;
+        var stdDev = Math.Sqrt(variance);
+
+        return new VelocityStat
+        {
+            AverageVelocity = Math.Round(avgVelocity, 1),
+            MaxVelocity = Math.Round(maxVelocity, 1),
+            MinVelocity = Math.Round(minVelocity, 1),
+            VelocityStdDev = Math.Round((decimal)stdDev, 1)
+        };
+    }
+
+    /// <summary>
+    /// 取得球種名稱
+    /// </summary>
+    /// <param name="pitchType">
+    /// 球種代碼
+    /// </param>
+    /// <returns>
+    /// 球種名稱
+    /// </returns>
+    private string GetPitchTypeName(string pitchType)
+    {
+        return pitchType switch
+        {
+            "FF" => "四縫線快速球",
+            "FT" => "二縫線快速球",
+            "SI" => "伸卡球",
+            "FC" => "卡特球",
+            "CU" => "曲球",
+            "SL" => "滑球",
+            "CH" => "變速球",
+            "KN" => "蝴蝶球",
+            "EP" => "小便球",
+            "FO" => "指叉球",
+            "FS" => "快指球",
+            "SC" => "螺絲球",
+            _ => pitchType
+        };
     }
 
     /// <summary>

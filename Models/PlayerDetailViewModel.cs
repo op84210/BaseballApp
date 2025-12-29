@@ -443,6 +443,63 @@ public class BestPA
 }
 
 /// <summary>
+/// 球種使用統計
+/// </summary>
+public class PitchTypeStat
+{
+    /// <summary>
+    /// 球種代碼
+    /// </summary>
+    public string PitchType { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 球種名稱
+    /// </summary>
+    public string PitchTypeName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 使用次數
+    /// </summary>
+    public int Count { get; set; }
+
+    /// <summary>
+    /// 使用比率（百分比）
+    /// </summary>
+    public decimal UsagePercentage { get; set; }
+
+    /// <summary>
+    /// 平均球速
+    /// </summary>
+    public decimal AverageVelocity { get; set; }
+}
+
+/// <summary>
+/// 球速統計
+/// </summary>
+public class VelocityStat
+{
+    /// <summary>
+    /// 平均球速
+    /// </summary>
+    public decimal AverageVelocity { get; set; }
+
+    /// <summary>
+    /// 最高球速
+    /// </summary>
+    public decimal MaxVelocity { get; set; }
+
+    /// <summary>
+    /// 最低球速
+    /// </summary>
+    public decimal MinVelocity { get; set; }
+
+    /// <summary>
+    /// 球速標準差
+    /// </summary>
+    public decimal VelocityStdDev { get; set; }
+}
+
+/// <summary>
 /// 投手數據統計
 /// </summary>
 public class PitcherStats
@@ -699,6 +756,16 @@ public class PitcherStats
     /// 最佳投球表現列表
     /// </summary>
     public List<BestPitchingPerformance> BestPerformances { get; set; } = [];
+
+    /// <summary>
+    /// 球種使用統計列表
+    /// </summary>
+    public List<PitchTypeStat> PitchTypeStats { get; set; } = [];
+
+    /// <summary>
+    /// 球速統計
+    /// </summary>
+    public VelocityStat VelocityStats { get; set; } = new VelocityStat();
 }
 
 /// <summary>

@@ -296,6 +296,45 @@
         </div>
     }
 
+    <!-- 球速統計 -->
+    @if (Model.PitcherDetail?.Stats?.VelocityStats != null)
+    {
+        <div class="row mb-4">
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h3 class="card-title">@Model.PitcherDetail.Stats.VelocityStats.AverageVelocity.ToString("F1") km/h</h3>
+                        <p class="card-text text-muted">平均球速</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h3 class="card-title">@Model.PitcherDetail.Stats.VelocityStats.MaxVelocity.ToString("F1") km/h</h3>
+                        <p class="card-text text-muted">最高球速</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h3 class="card-title">@Model.PitcherDetail.Stats.VelocityStats.MinVelocity.ToString("F1") km/h</h3>
+                        <p class="card-text text-muted">最低球速</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h3 class="card-title">@Model.PitcherDetail.Stats.VelocityStats.VelocityStdDev.ToString("F1") km/h</h3>
+                        <p class="card-text text-muted">球速標準差</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
     <hr class="my-4" />
 
     <!-- 系列賽分析：選單 + 圖表 -->
@@ -337,17 +376,57 @@
                         <h5 class="mb-3">投球表現</h5>
                     }
                     <div class="row gy-3">
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <div id="pitcherLineChart" style="height:320px;"></div>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <div id="pitcherRadarChart" style="height:320px;"></div>
+                        </div>
+                        <div class="col-md-4">
+                            <div id="pitchTypeChart" style="height:320px;"></div>
                         </div>
                     </div>
                 </div>
             }
         </div>
     </div>
+
+    <hr class="my-4" />
+
+    <!-- 球種使用統計 -->
+    @if (Model.PitcherDetail?.Stats?.PitchTypeStats != null && Model.PitcherDetail.Stats.PitchTypeStats.Any())
+    {
+        <div class="card mb-4">
+            <div class="card-header">
+                <h4>球種使用統計</h4>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>球種</th>
+                                <th>使用次數</th>
+                                <th>使用比率</th>
+                                <th>平均球速 (km/h)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var pitchType in Model.PitcherDetail.Stats.PitchTypeStats)
+                            {
+                                <tr>
+                                    <td>@pitchType.PitchTypeName (@pitchType.PitchType)</td>
+                                    <td>@pitchType.Count</td>
+                                    <td>@pitchType.UsagePercentage%</td>
+                                    <td>@(pitchType.AverageVelocity > 0 ? pitchType.AverageVelocity.ToString("F1") : "-")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
 
     <hr class="my-4" />
 

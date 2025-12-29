@@ -1,4 +1,4 @@
-@model IEnumerable<dynamic>
+@model BaseballApp.Models.TeamsViewModel
 
 @{
     ViewData["Title"] = "球隊列表";
@@ -6,6 +6,42 @@
 
 <div class="container mt-4">
     <h1 class="mb-4">🏆 球隊列表</h1>
+
+    @* --- 勝率與勝場變化折線圖 --- *@
+    <div class="card mb-4">
+        <div class="card-header">
+            <h4>全聯盟勝率與勝場變化</h4>
+        </div>
+        <div class="card-body">
+            <div id="teamWinRateLineChart" style="height:400px;"></div>
+        </div>
+    </div>
+
+    @* --- 全聯盟戰績表格 --- *@
+    <div class="card mb-4">
+        <div class="card-header">
+            <h4>全聯盟戰績表</h4>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover" id="teamStandingTable">
+                    <thead>
+                        <tr>
+                            <th>球隊</th>
+                            <th>出賽</th>
+                            <th>勝</th>
+                            <th>敗</th>
+                            <th>和</th>
+                            <th>勝率</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @* 這裡之後用 Model 或 ViewBag 傳遞的戰績資料渲染 *@
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 
     <div class="row">
         @foreach (var teamStat in Model)
@@ -26,3 +62,20 @@
         }
     </div>
 </div>
+
+@section Scripts {
+    <script src="~/lib/echarts/echarts.min.js"></script>
+    <script src="~/js/teamListCharts.js" asp-append-version="true"></script>
+    <script>
+        // TODO: 後端需傳遞 chartData 物件 (包含日期、各隊勝場/勝率序列)
+        // 範例格式：
+        // var chartData = {
+        //   dates: ["2024-04-01", "2024-04-02", ...],
+        //   teams: [
+        //     { name: "統一7-ELEVEn獅", wins: [1,2,2,...], winRates: [1,1,0.67,...] },
+        //     ...
+        //   ]
+        // };
+        // TeamListCharts.renderWinRateLineChart(chartData);
+    </script>
+}

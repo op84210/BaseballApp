@@ -12,6 +12,7 @@ public interface IBaseballDbService
     Task<IEnumerable<PitcherBox>> GetPitcherBoxAsync(string playerId = "", string seasonId = "ALL");
     Task<IEnumerable<PA>> GetPAAsync(string batterId = "", int gameSeq = 0, string seasonId = "ALL");
     Task<IEnumerable<Event>> GetEventsAsync(int paId);
+    Task<IEnumerable<Event>> GetPitcherEventsAsync(string pitcherId, string seasonId = "ALL");
     Task<BattingStats> CalculateBattingStatsAsync(string playerId, string seasonId = "ALL");
     Task<IEnumerable<Batter>> GetAllBattersAsync(string seasonId = "ALL", string teamId = "");
     Task<Batter?> GetBatterAsync(string playerId);
@@ -190,6 +191,28 @@ public class BaseballDbService : IBaseballDbService
         catch (Exception ex)
         {
             _logger.LogError(ex, "讀取事件資料時發生錯誤，paId={PaId}", paId);
+            return Enumerable.Empty<Event>();
+        }
+    }
+
+    public async Task<IEnumerable<Event>> GetPitcherEventsAsync(string pitcherId, string seasonId = "ALL")
+    {
+        try
+        {
+            var query = _context.Events
+                .Include(e => e.PA)
+                .Where(e => e.PitcherId == pitcherId);
+
+            if (!string.IsNullOrEmpty(seasonId) && seasonId != "ALL")
+            {
+                query = query.Where(e => e.PA != null && e.PA.SeasonId == seasonId);
+            }
+
+            return await query.ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "讀取投手事件資料時發生錯誤，pitcherId={PitcherId}", pitcherId);
             return Enumerable.Empty<Event>();
         }
     }

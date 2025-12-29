@@ -7,6 +7,7 @@
     let batterRadarChart = null;
     let pitcherLineChart = null;
     let pitcherRadarChart = null;
+    let pitchTypeChart = null;
 
     // 打者數據變數
     let batterGames = [];
@@ -31,6 +32,7 @@
         const batterRadarChartElement = document.getElementById('batterRadarChart');
         const pitcherLineChartElement = document.getElementById('pitcherLineChart');
         const pitcherRadarChartElement = document.getElementById('pitcherRadarChart');
+        const pitchTypeChartElement = document.getElementById('pitchTypeChart');
 
         if (batterLineChartElement) {
             batterLineChart = echarts.init(batterLineChartElement);
@@ -43,6 +45,9 @@
         }
         if (pitcherRadarChartElement) {
             pitcherRadarChart = echarts.init(pitcherRadarChartElement);
+        }
+        if (pitchTypeChartElement) {
+            pitchTypeChart = echarts.init(pitchTypeChartElement);
         }
 
         // 從 API 載入數據並渲染圖表
@@ -560,6 +565,7 @@
         renderBatterRadarChart(seasonId);
         renderPitcherLineChart(seasonId);
         renderPitcherRadarChart(seasonId);
+        renderPitchTypeChart(seasonId);
     }
 
     // 渲染投手折線圖
@@ -1049,6 +1055,98 @@
         }
     }
 
+    // 渲染球種使用圓餅圖
+    function renderPitchTypeChart(seasonId) {
+        if (!pitchTypeChart) {
+            return;
+        }
+
+        // 從表格中提取球種數據
+        const pitchTypeRows = document.querySelectorAll('.table.table-hover tbody tr');
+        const pitchTypeData = [];
+
+        pitchTypeRows.forEach(row => {
+            const cells = row.querySelectorAll('td');
+            if (cells.length >= 4) {
+                const pitchTypeName = cells[0].textContent?.split(' (')[0] || '';
+                const usagePercentage = parseFloat(cells[2].textContent?.replace('%', '') || '0');
+                
+                if (usagePercentage > 0) {
+                    pitchTypeData.push({
+                        name: pitchTypeName,
+                        value: usagePercentage
+                    });
+                }
+            }
+        });
+
+        if (pitchTypeData.length === 0) {
+            pitchTypeChart.setOption({
+                title: { 
+                    text: '球種使用統計', 
+                    left: 'center', 
+                    textStyle: { fontSize: 14 }
+                },
+                graphic: {
+                    type: 'text',
+                    left: 'center',
+                    top: 'middle',
+                    style: {
+                        text: '⚠ 沒有球種數據',
+                        fontSize: 16,
+                        fill: '#999',
+                        textAlign: 'center'
+                    }
+                }
+            });
+            return;
+        }
+
+        const option = {
+            title: { 
+                text: '球種使用比率', 
+                left: 'center', 
+                textStyle: { fontSize: 14 }
+            },
+            tooltip: {
+                trigger: 'item',
+                formatter: '{a} <br/>{b}: {c}% ({d}%)'
+            },
+            legend: {
+                orient: 'vertical',
+                left: 'left',
+                top: 'middle',
+                textStyle: {
+                    fontSize: 12
+                }
+            },
+            series: [{
+                name: '球種使用',
+                type: 'pie',
+                radius: ['40%', '70%'],
+                center: ['60%', '50%'],
+                avoidLabelOverlap: false,
+                emphasis: {
+                    itemStyle: {
+                        shadowBlur: 10,
+                        shadowOffsetX: 0,
+                        shadowColor: 'rgba(0, 0, 0, 0.5)'
+                    }
+                },
+                label: {
+                    show: false,
+                    position: 'center'
+                },
+                labelLine: {
+                    show: false
+                },
+                data: pitchTypeData
+            }]
+        };
+
+        pitchTypeChart.setOption(option);
+    }
+
     // 暴露公開方法
     window.PlayerDetailModule = {
         init: init,
@@ -1057,6 +1155,7 @@
         renderBatterLineChart: renderBatterLineChart,
         renderBatterRadarChart: renderBatterRadarChart,
         renderPitcherLineChart: renderPitcherLineChart,
-        renderPitcherRadarChart: renderPitcherRadarChart
+        renderPitcherRadarChart: renderPitcherRadarChart,
+        renderPitchTypeChart: renderPitchTypeChart
     };
 })();
