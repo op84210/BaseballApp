@@ -42,15 +42,16 @@ public class BaseballController : Controller
             var gameResults = await _baseballDbService.GetGameResultsAsync(seasonId);
             var standings = await _baseballDbService.GetTeamStandingsAsync(seasonId);
             var seasons = await GetSeasonOptions(seasonId);
+            var teamCards = await GetTeamCards(seasonId, gameResults);
 
             // 計算圖表資料與時間序列
             var chartData = BuildChartData(gameResults, teams);
-
+            
             var viewModel = new TeamsViewModel
             {
                 SeasonId = seasonId,
                 SeasonOptions = seasons,
-                Teams = teams.Select(t => new TeamCardViewModel { /* ... */ }).ToList(),
+                TeamCards = teamCards,
                 ChartData = chartData,
                 Standings = standings.Select(s => new TeamStandingViewModel { /* ... */ }).ToList()
             };
@@ -61,6 +62,35 @@ public class BaseballController : Controller
         {
             _logger.LogError(ex, "載入團隊頁面時發生錯誤");
             return View("Error");
+        }
+    }
+
+    /// <summary>
+    /// 取得球隊卡片列表
+    /// </summary>
+    private async Task<List<TeamCardViewModel>> GetTeamCards(string seasonId, IEnumerable<GameResult> gameResults)
+    {
+        try
+        {
+            var teams = await _baseballDbService.GetAllTeamsAsync(seasonId);
+
+            var teamCards = teams.Select(t => new TeamCardViewModel
+            {
+                Team = t,
+                Games = gameResults.Count(gr => gr.HomeTeamId == t.TeamId || gr.AwayTeamId == t.TeamId),
+                Wins = gameResults.Count(gr => (gr.HomeTeamId == t.TeamId && gr.HomeScore > gr.AwayScore) ||
+                                            (gr.AwayTeamId == t.TeamId && gr.AwayScore > gr.HomeScore)),
+                Losses = gameResults.Count(gr => (gr.HomeTeamId == t.TeamId && gr.HomeScore < gr.AwayScore) ||
+                                            (gr.AwayTeamId == t.TeamId && gr.AwayScore < gr.HomeScore)),
+                Ties = gameResults.Count(gr => (gr.HomeTeamId == t.TeamId || gr.AwayTeamId == t.TeamId) && gr.HomeScore == gr.AwayScore)
+            }).ToList();
+
+            return teamCards;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "取得球隊卡片列表時發生錯誤");
+            return new List<TeamCardViewModel>();
         }
     }
 

@@ -21,7 +21,7 @@ public class TeamsViewModel
     /// <summary>
     /// 球隊卡片列表
     /// </summary>
-    public List<TeamCardViewModel> Teams { get; set; } = new();
+    public List<TeamCardViewModel> TeamCards { get; set; } = new();
 
     /// <summary>
     /// 勝率與勝場變化圖表資料
@@ -67,12 +67,14 @@ public class TeamCardViewModel
     /// <summary>
     /// 勝率
     /// </summary>
-    public decimal WinRate { get; set; }
-
-    /// <summary>
-    /// 排名
-    /// </summary>
-    public int Rank { get; set; }
+    public decimal WinRate
+    {
+        get
+        {
+            if (Games == 0) return 0;
+            return Math.Round((decimal)Wins / Games, 3);
+        }
+    }
 }
 
 /// <summary>
