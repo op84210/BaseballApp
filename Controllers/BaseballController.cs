@@ -42,7 +42,7 @@ public class BaseballController : Controller
             var games = await _baseballDbService.GetGamesAsync(seasonId);
             var seasons = await GetSeasonOptions(seasonId);
             var teamCards = await GetTeamCards(seasonId, games);
-            var standings = await BuildStandings(games, teams);
+            var standings = BuildStandings(games, teams);
 
             // 計算圖表資料與時間序列
             var viewModel = new TeamsViewModel
@@ -71,7 +71,7 @@ public class BaseballController : Controller
     /// <param name="teams">
     /// 球隊列表
     /// </param>
-    private async Task<List<TeamStandingViewModel>> BuildStandings(IEnumerable<Game> games, IEnumerable<Team> teams)
+    private List<TeamStandingViewModel> BuildStandings(IEnumerable<Game> games, IEnumerable<Team> teams)
     {
         try
         {
