@@ -39,21 +39,18 @@ public class BaseballController : Controller
         try
         {
             var teams = await _baseballDbService.GetAllTeamsAsync(seasonId);
-            var gameResults = await _baseballDbService.GetGameResultsAsync(seasonId);
-            var standings = await _baseballDbService.GetTeamStandingsAsync(seasonId);
+            var games = await _baseballDbService.GetGamesAsync(seasonId);
             var seasons = await GetSeasonOptions(seasonId);
-            var teamCards = await GetTeamCards(seasonId, gameResults);
+            var teamCards = await GetTeamCards(seasonId, games);
+            var standings = await BuildStandings(games, teams);
 
             // 計算圖表資料與時間序列
-            var chartData = BuildChartData(gameResults, teams);
-            
             var viewModel = new TeamsViewModel
             {
                 SeasonId = seasonId,
                 SeasonOptions = seasons,
                 TeamCards = teamCards,
-                ChartData = chartData,
-                Standings = standings.Select(s => new TeamStandingViewModel { /* ... */ }).ToList()
+                Standings = standings
             };
 
             return View(viewModel);
@@ -66,9 +63,60 @@ public class BaseballController : Controller
     }
 
     /// <summary>
+    /// 建立戰績表
+    /// </summary>
+    /// <param name="games">
+    /// 比賽列表
+    /// </param>
+    /// <param name="teams">
+    /// 球隊列表
+    /// </param>
+    private async Task<List<TeamStandingViewModel>> BuildStandings(IEnumerable<Game> games, IEnumerable<Team> teams)
+    {
+        try
+        {
+            var standings = teams.Select(t =>
+            {
+                var teamGames = games.Where(g => g.HomeTeamId == t.TeamId || g.AwayTeamId == t.TeamId);
+                var wins = teamGames.Count(g => (g.HomeTeamId == t.TeamId && g.HomeScores.Sum(s => s.Score) > g.AwayScores.Sum(s => s.Score)) ||
+                                               (g.AwayTeamId == t.TeamId && g.AwayScores.Sum(s => s.Score) > g.HomeScores.Sum(s => s.Score)));
+                var losses = teamGames.Count(g => (g.HomeTeamId == t.TeamId && g.HomeScores.Sum(s => s.Score) < g.AwayScores.Sum(s => s.Score)) ||
+                                                 (g.AwayTeamId == t.TeamId && g.AwayScores.Sum(s => s.Score) < g.HomeScores.Sum(s => s.Score)));
+                var ties = teamGames.Count(g => (g.HomeTeamId == t.TeamId || g.AwayTeamId == t.TeamId) && g.HomeScores.Sum(s => s.Score) == g.AwayScores.Sum(s => s.Score));
+                var totalGames = wins + losses + ties;
+                var winRate = totalGames > 0 ? Math.Round((decimal)wins / totalGames, 3) : 0;
+
+                return new TeamStandingViewModel
+                {
+                    TeamName = t.TeamName,
+                    TeamId = t.TeamId,
+                    Games = totalGames,
+                    Wins = wins,
+                    Losses = losses,
+                    Ties = ties,
+                    WinRate = winRate
+                };
+            }).ToList();
+
+            standings = standings
+                .OrderByDescending(s => s.WinRate)
+                .ThenByDescending(s => s.Wins)
+                .ThenBy(s => s.Losses)
+                .ToList();
+
+            return standings;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "計算戰績表時發生錯誤");
+            return new List<TeamStandingViewModel>();
+        }
+    }
+
+    /// <summary>
     /// 取得球隊卡片列表
     /// </summary>
-    private async Task<List<TeamCardViewModel>> GetTeamCards(string seasonId, IEnumerable<GameResult> gameResults)
+    private async Task<List<TeamCardViewModel>> GetTeamCards(string seasonId, IEnumerable<Game> gameResults)
     {
         try
         {
@@ -78,11 +126,11 @@ public class BaseballController : Controller
             {
                 Team = t,
                 Games = gameResults.Count(gr => gr.HomeTeamId == t.TeamId || gr.AwayTeamId == t.TeamId),
-                Wins = gameResults.Count(gr => (gr.HomeTeamId == t.TeamId && gr.HomeScore > gr.AwayScore) ||
-                                            (gr.AwayTeamId == t.TeamId && gr.AwayScore > gr.HomeScore)),
-                Losses = gameResults.Count(gr => (gr.HomeTeamId == t.TeamId && gr.HomeScore < gr.AwayScore) ||
-                                            (gr.AwayTeamId == t.TeamId && gr.AwayScore < gr.HomeScore)),
-                Ties = gameResults.Count(gr => (gr.HomeTeamId == t.TeamId || gr.AwayTeamId == t.TeamId) && gr.HomeScore == gr.AwayScore)
+                Wins = gameResults.Count(gr => (gr.HomeTeamId == t.TeamId && gr.HomeScores.Sum(s => s.Score) > gr.AwayScores.Sum(s => s.Score)) ||
+                                            (gr.AwayTeamId == t.TeamId && gr.AwayScores.Sum(s => s.Score) > gr.HomeScores.Sum(s => s.Score))),
+                Losses = gameResults.Count(gr => (gr.HomeTeamId == t.TeamId && gr.HomeScores.Sum(s => s.Score) < gr.AwayScores.Sum(s => s.Score)) ||
+                                            (gr.AwayTeamId == t.TeamId && gr.AwayScores.Sum(s => s.Score) < gr.HomeScores.Sum(s => s.Score))),
+                Ties = gameResults.Count(gr => (gr.HomeTeamId == t.TeamId || gr.AwayTeamId == t.TeamId) && gr.HomeScores.Sum(s => s.Score) == gr.AwayScores.Sum(s => s.Score))
             }).ToList();
 
             return teamCards;

@@ -24,11 +24,6 @@ public class TeamsViewModel
     public List<TeamCardViewModel> TeamCards { get; set; } = new();
 
     /// <summary>
-    /// 勝率與勝場變化圖表資料
-    /// </summary>
-    public WinRateChartData ChartData { get; set; } = new();
-
-    /// <summary>
     /// 全聯盟戰績表格
     /// </summary>
     public List<TeamStandingViewModel> Standings { get; set; } = new();
@@ -78,57 +73,10 @@ public class TeamCardViewModel
 }
 
 /// <summary>
-/// 勝率與勝場變化圖表資料
-/// </summary>
-public class WinRateChartData
-{
-    /// <summary>
-    /// 日期列表 (X軸)
-    /// </summary>
-    public List<string> Dates { get; set; } = new();
-
-    /// <summary>
-    /// 各球隊資料
-    /// </summary>
-    public List<TeamChartData> Teams { get; set; } = new();
-}
-
-/// <summary>
-/// 單隊圖表資料
-/// </summary>
-public class TeamChartData
-{
-    /// <summary>
-    /// 球隊名稱
-    /// </summary>
-    public string TeamName { get; set; } = string.Empty;
-
-    /// <summary>
-    /// 球隊ID
-    /// </summary>
-    public string TeamId { get; set; } = string.Empty;
-
-    /// <summary>
-    /// 累積勝場數序列
-    /// </summary>
-    public List<int> Wins { get; set; } = new();
-
-    /// <summary>
-    /// 勝率序列
-    /// </summary>
-    public List<decimal> WinRates { get; set; } = new();
-}
-
-/// <summary>
 /// 球隊戰績 ViewModel
 /// </summary>
 public class TeamStandingViewModel
 {
-    /// <summary>
-    /// 排名
-    /// </summary>
-    public int Rank { get; set; }
-
     /// <summary>
     /// 球隊名稱
     /// </summary>
@@ -163,9 +111,4 @@ public class TeamStandingViewModel
     /// 勝率
     /// </summary>
     public decimal WinRate { get; set; }
-
-    /// <summary>
-    /// 勝差
-    /// </summary>
-    public decimal GamesBehind { get; set; }
 }

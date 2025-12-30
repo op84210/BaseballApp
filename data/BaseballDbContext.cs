@@ -177,6 +177,20 @@ public class BaseballDbContext : DbContext
                 .HasForeignKey(g => g.HomeTeamId)
                 .HasPrincipalKey(t => t.TeamId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // 關聯關係：Game -> Home Scores
+            entity.HasMany(g => g.HomeScores)
+                .WithOne(s => s.Game)
+                .HasForeignKey(s => new { s.SeasonId, s.GameSeq, s.HomeOrAway })
+                .HasPrincipalKey(g => new { g.SeasonId, g.Seq, HomeOrAway = "H" })
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // 關聯關係：Game -> Away Scores
+            entity.HasMany(g => g.AwayScores)
+                .WithOne(s => s.Game)
+                .HasForeignKey(s => new { s.SeasonId, s.GameSeq, s.HomeOrAway })
+                .HasPrincipalKey(g => new { g.SeasonId, g.Seq, HomeOrAway = "A" })
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         // tblScores

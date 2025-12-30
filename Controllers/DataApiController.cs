@@ -1,21 +1,22 @@
+using System.Linq;
 using BaseballApp.Models;
 using BaseballApp.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BaseballApp.Controllers;
 
-[Route("api/playerdata")]
+[Route("api/data")]
 [ApiController]
-public class PlayerDataApiController : ControllerBase
+public class DataApiController : ControllerBase
 {
     private readonly IBaseballDbService _baseballDbService;
     private readonly IRankingCacheService _rankingCacheService;
-    private readonly ILogger<PlayerDataApiController> _logger;
+    private readonly ILogger<DataApiController> _logger;
 
-    public PlayerDataApiController(
+    public DataApiController(
         IBaseballDbService baseballDbService,
         IRankingCacheService rankingCacheService,
-        ILogger<PlayerDataApiController> logger)
+        ILogger<DataApiController> logger)
     {
         _baseballDbService = baseballDbService;
         _rankingCacheService = rankingCacheService;
@@ -728,5 +729,134 @@ public class PlayerDataApiController : ControllerBase
             // 偶數個：取中間兩個的平均
             return (sorted[count / 2 - 1] + sorted[count / 2]) / 2;
         }
+    }
+
+    [HttpGet("winRate/chart")]
+    public async Task<IActionResult> GetWinRateChartData([FromQuery] string seasonId = "ALL")
+    {
+        try
+        {
+            // 取得比賽資料
+            var games = await _baseballDbService.GetGamesAsync(seasonId: seasonId);
+
+            string[] dates = games
+                .Select(g => g.Date.ToString("yyyy-MM-dd"))
+                .Distinct()
+                .OrderBy(d => d)
+                .ToArray();
+
+            var teams = await _baseballDbService.GetAllTeamsAsync();
+            var teamsList = new List<Team>();
+            teamsList.AddRange(teams.Select(t => new Team
+            {
+                name = t.TeamName,
+                gameCount = 0,
+                wins = new List<int>(),
+                losses = new List<int>(),
+                winRates = new List<decimal>()
+            }));
+
+            foreach (var g in games)
+            {
+                var homeScore = g.HomeScores.Sum(s => s.Score);
+                var awayScore = g.AwayScores.Sum(s => s.Score);
+
+                // 更新主隊數據
+                var HomeTeam = g.HomeTeam;
+                var homeTeam = teamsList.FirstOrDefault(t => t.name == HomeTeam.TeamName);
+                if (homeTeam != null)
+                {
+                    homeTeam.gameCount += 1;
+                    if (homeScore > awayScore)
+                    {
+                        homeTeam.wins.Add(1);
+                        homeTeam.losses.Add(0);
+                    }
+                    else if (awayScore > homeScore)
+                    {
+                        homeTeam.wins.Add(0);
+                        homeTeam.losses.Add(1);
+                    }
+                    else
+                    {
+                        // 平局
+                        homeTeam.wins.Add(0);
+                        homeTeam.losses.Add(0);
+                    }
+                    var totalGames = homeTeam.wins.Sum() + homeTeam.losses.Sum();
+                    var winRate = totalGames > 0 ? Math.Round((decimal)homeTeam.wins.Sum() / totalGames * 100, 2) : 0;
+                    homeTeam.winRates.Add(winRate);
+                }
+
+                // 更新客隊數據
+                var AwayTeam = g.AwayTeam;
+                var awayTeam = teamsList.FirstOrDefault(t => t.name == AwayTeam.TeamName);
+                if (awayTeam != null)
+                {
+                    awayTeam.gameCount += 1;
+                    if (awayScore > homeScore)
+                    {
+                        awayTeam.wins.Add(1);
+                        awayTeam.losses.Add(0);
+                    }
+                    else if (homeScore > awayScore)
+                    {
+                        awayTeam.wins.Add(0);
+                        awayTeam.losses.Add(1);
+                    }
+                    else
+                    {
+                        // 平局
+                        awayTeam.wins.Add(0);
+                        awayTeam.losses.Add(0);
+                    }
+                    var totalGames = awayTeam.wins.Sum() + awayTeam.losses.Sum();
+                    var winRate = totalGames > 0 ? Math.Round((decimal)awayTeam.wins.Sum() / totalGames * 100, 2) : 0;
+                    awayTeam.winRates.Add(winRate);
+                }
+
+                // 處理沒有比賽的球隊
+                foreach (var team in teamsList)
+                {
+                    if (team.name != HomeTeam.TeamName && team.name != AwayTeam.TeamName)
+                    {
+                        team.wins.Add(team.wins.Count > 0 ? team.wins.Last() : 0);
+                        team.losses.Add(team.losses.Count > 0 ? team.losses.Last() : 0);
+                        team.winRates.Add(team.winRates.Count > 0 ? team.winRates.Last() : 0);
+                    }
+                }
+            }
+
+            // 回傳結果
+            return Ok(new
+            {
+                hasData = true,
+                chartData = new TeamsWinRate
+                {
+                    dates = dates,
+                    teams = teamsList.ToArray()
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"取得勝率圖表數據失敗: seasonId={seasonId}");
+            return StatusCode(500, new { error = "伺服器錯誤" });
+        }
+    }
+
+    private class TeamsWinRate
+    {
+        public required string[] dates { get; set; }
+        public required Team[] teams { get; set; }
+
+    }
+    private class Team
+    {
+        public required string name { get; set; }
+        public int gameCount { get; set; } = 0;
+        public required List<int> wins { get; set; } = new List<int>();
+        public required List<int> losses { get; set; } = new List<int>();
+        public required List<decimal> winRates { get; set; } = new List<decimal>();
     }
 }

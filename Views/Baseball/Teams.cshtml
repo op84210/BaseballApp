@@ -44,7 +44,7 @@
     </div>
 
     <div class="row">
-        @foreach (var teamStat in Model)
+        @foreach (TeamCardViewModel teamStat in Model.TeamCards)
         {
             <div class="col-md-6 mb-4">
                 <div class="card h-100">
@@ -67,15 +67,10 @@
     <script src="~/lib/echarts/echarts.min.js"></script>
     <script src="~/js/teamListCharts.js" asp-append-version="true"></script>
     <script>
-        // TODO: 後端需傳遞 chartData 物件 (包含日期、各隊勝場/勝率序列)
-        // 範例格式：
-        // var chartData = {
-        //   dates: ["2024-04-01", "2024-04-02", ...],
-        //   teams: [
-        //     { name: "統一7-ELEVEn獅", wins: [1,2,2,...], winRates: [1,1,0.67,...] },
-        //     ...
-        //   ]
-        // };
-        // TeamListCharts.renderWinRateLineChart(chartData);
+
+        const seasonId = '@Model.SeasonId';
+        
+        // 初始化模組（使用 API 載入數據）
+        TeamListCharts.init(seasonId);
     </script>
 }

@@ -72,8 +72,8 @@
         try {
             // 雙棲球員：同時載入投打數據
             const [batterResponse, pitcherResponse] = await Promise.all([
-                fetch(`/api/playerdata/batter/${playerId}/chart?seasonId=${seasonId}`),
-                fetch(`/api/playerdata/pitcher/${playerId}/chart?seasonId=${seasonId}`)
+                fetch(`/api/data/batter/${playerId}/chart?seasonId=${seasonId}`),
+                fetch(`/api/data/pitcher/${playerId}/chart?seasonId=${seasonId}`)
             ]);
 
             let hasBatterData = false;
