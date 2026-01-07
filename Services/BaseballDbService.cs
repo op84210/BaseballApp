@@ -41,7 +41,11 @@ public class BaseballDbService : IBaseballDbService
     public async Task<IEnumerable<Game>> GetGamesAsync(string? seasonId = "ALL", string? teamId = "ALL"){
         try
         {
-            var query = _context.Games.AsQueryable();
+            var query = _context.Games
+                .Include(g => g.HomeTeam)
+                .Include(g => g.AwayTeam)
+                .Include(g => g.Scores)
+                .AsQueryable();
 
             if (!string.IsNullOrEmpty(seasonId) && seasonId != "ALL")
             {

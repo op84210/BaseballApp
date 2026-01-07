@@ -178,18 +178,11 @@ public class BaseballDbContext : DbContext
                 .HasPrincipalKey(t => t.TeamId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // 關聯關係：Game -> Home Scores
-            entity.HasMany(g => g.HomeScores)
+            // 關聯關係：Game -> Scores（以 seasonId+seq 對應，Home/Away 以資料內容判斷）
+            entity.HasMany(g => g.Scores)
                 .WithOne(s => s.Game)
-                .HasForeignKey(s => new { s.SeasonId, s.GameSeq, s.HomeOrAway })
-                .HasPrincipalKey(g => new { g.SeasonId, g.Seq, HomeOrAway = "H" })
-                .OnDelete(DeleteBehavior.Restrict);
-
-            // 關聯關係：Game -> Away Scores
-            entity.HasMany(g => g.AwayScores)
-                .WithOne(s => s.Game)
-                .HasForeignKey(s => new { s.SeasonId, s.GameSeq, s.HomeOrAway })
-                .HasPrincipalKey(g => new { g.SeasonId, g.Seq, HomeOrAway = "A" })
+                .HasForeignKey(s => new { s.SeasonId, s.GameSeq })
+                .HasPrincipalKey(g => new { g.SeasonId, g.Seq })
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
@@ -197,7 +190,8 @@ public class BaseballDbContext : DbContext
         modelBuilder.Entity<Scores>(entity =>
         {
             entity.ToTable("tblScores");
-            entity.HasKey(e => e.SeasonId);
+            // 複合主鍵：seasonId, gameSeq, homeOrAway, inning
+            entity.HasKey(e => new { e.SeasonId, e.GameSeq, e.HomeOrAway, e.Inning });
             entity.Property(e => e.SeasonId).HasColumnName("seasonId");
             entity.Property(e => e.GameSeq).HasColumnName("gameSeq");
             entity.Property(e => e.HomeOrAway).HasColumnName("homeOrAway");

@@ -945,15 +945,11 @@ namespace BaseballApp.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("seasonId");
 
-                    b.Property<string>("GameSeasonId")
-                        .HasColumnType("TEXT");
-
                     b.Property<int>("GameSeq")
                         .HasColumnType("INTEGER")
                         .HasColumnName("gameSeq");
 
                     b.Property<string>("HomeOrAway")
-                        .IsRequired()
                         .HasColumnType("TEXT")
                         .HasColumnName("homeOrAway");
 
@@ -965,9 +961,7 @@ namespace BaseballApp.Migrations
                         .HasColumnType("INTEGER")
                         .HasColumnName("score");
 
-                    b.HasKey("SeasonId");
-
-                    b.HasIndex("GameSeasonId", "GameSeq");
+                    b.HasKey("SeasonId", "GameSeq", "HomeOrAway", "Inning");
 
                     b.ToTable("tblScores", (string)null);
                 });
@@ -1474,8 +1468,10 @@ namespace BaseballApp.Migrations
             modelBuilder.Entity("BaseballApp.Models.Scores", b =>
                 {
                     b.HasOne("BaseballApp.Models.Game", "Game")
-                        .WithMany()
-                        .HasForeignKey("GameSeasonId", "GameSeq");
+                        .WithMany("Scores")
+                        .HasForeignKey("SeasonId", "GameSeq")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
 
                     b.Navigation("Game");
                 });
@@ -1483,6 +1479,11 @@ namespace BaseballApp.Migrations
             modelBuilder.Entity("BaseballApp.Models.Batter", b =>
                 {
                     b.Navigation("PlayerTeams");
+                });
+
+            modelBuilder.Entity("BaseballApp.Models.Game", b =>
+                {
+                    b.Navigation("Scores");
                 });
 
             modelBuilder.Entity("BaseballApp.Models.Pitcher", b =>

@@ -71,13 +71,14 @@ using (var scope = app.Services.CreateScope())
     {
         var context = services.GetRequiredService<BaseballDbContext>();
         var logger = services.GetRequiredService<ILogger<Program>>();
-        
+
         // 自動套用 pending migrations（建立表結構）
         await context.Database.MigrateAsync();
         Console.WriteLine("✓ 資料庫 Migration 完成");
 
-            // ====== 自動匯入資料（從 SQLite）======
-        if (!context.Batters.Any())
+        // ====== 自動匯入資料（從 SQLite）======
+        // 只在目標資料庫為 PostgreSQL 且資料為空時，從 SQLite 匯入
+        if (context.Database.IsNpgsql() && !context.Batters.Any())
         {
             var sqlitePath = Path.Combine(AppContext.BaseDirectory, "data", "baseball.db");
             if (File.Exists(sqlitePath))
@@ -94,17 +95,16 @@ using (var scope = app.Services.CreateScope())
                     {
                         PlayerId = reader.GetString(0),
                         PlayerName = reader.GetString(1)
-                        // 依你的欄位結構補齊
                     };
                     context.Batters.Add(batter);
                 }
-                
+
                 context.SaveChanges();
-                Console.WriteLine("✓ Players 資料自 SQLite 匯入完成");
+                Console.WriteLine("✓ Batters 資料自 SQLite 匯入完成");
             }
             else
             {
-                Console.WriteLine("找不到 baseball.db，未自動匯入 Players 資料");
+                Console.WriteLine("找不到 baseball.db，未自動匯入 Batters 資料");
             }
         }
     }

@@ -40,6 +40,13 @@ public class Game
     public Stadium? Stadium { get; set; }
     public Team? AwayTeam { get; set; }
     public Team? HomeTeam { get; set; }
-    public ICollection<Scores> AwayScores { get; set; } = [];
-    public ICollection<Scores> HomeScores { get; set; } = [];
+    // 所有得分記錄
+    public ICollection<Scores> Scores { get; set; } = [];
+
+    // 方便使用的衍生屬性（不參與對應）：主隊/客隊得分
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    public IEnumerable<Scores> HomeScores => Scores.Where(s => s.HomeOrAway == "H");
+
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    public IEnumerable<Scores> AwayScores => Scores.Where(s => s.HomeOrAway == "A");
 }
