@@ -63,57 +63,8 @@ builder.Services.AddHostedService<BaseballApp.BackgroundServices.RankingCacheUpd
 
 var app = builder.Build();
 
-// 只進行資料庫 Migration（建立表結構），不自動匯入資料
-using (var scope = app.Services.CreateScope())
-{
-    var services = scope.ServiceProvider;
-    try
-    {
-        var context = services.GetRequiredService<BaseballDbContext>();
-        var logger = services.GetRequiredService<ILogger<Program>>();
-
-        // 自動套用 pending migrations（建立表結構）
-        await context.Database.MigrateAsync();
-        Console.WriteLine("✓ 資料庫 Migration 完成");
-
-        // ====== 自動匯入資料（從 SQLite）======
-        // 只在目標資料庫為 PostgreSQL 且資料為空時，從 SQLite 匯入
-        if (context.Database.IsNpgsql() && !context.Batters.Any())
-        {
-            var sqlitePath = Path.Combine(AppContext.BaseDirectory, "data", "baseball.db");
-            if (File.Exists(sqlitePath))
-            {
-                using var sqlite = new SqliteConnection($"Data Source={sqlitePath}");
-                sqlite.Open();
-                var cmd = sqlite.CreateCommand();
-                cmd.CommandText = "SELECT playerId, playerName FROM tblBatter";
-
-                using var reader = cmd.ExecuteReader();
-                while (reader.Read())
-                {
-                    var batter = new Batter
-                    {
-                        PlayerId = reader.GetString(0),
-                        PlayerName = reader.GetString(1)
-                    };
-                    context.Batters.Add(batter);
-                }
-
-                context.SaveChanges();
-                Console.WriteLine("✓ Batters 資料自 SQLite 匯入完成");
-            }
-            else
-            {
-                Console.WriteLine("找不到 baseball.db，未自動匯入 Batters 資料");
-            }
-        }
-    }
-    catch (Exception ex)
-    {
-        var logger = services.GetRequiredService<ILogger<Program>>();
-        logger.LogError(ex, "資料庫 Migration 執行時發生錯誤");
-    }
-}
+// 移到獨立函式
+//await DbInitializer.ApplyMigrationsAndImportAsync(app.Services);
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
@@ -140,3 +91,60 @@ app.MapControllerRoute(
 app.MapControllers(); // 映射 /api/*
 
 app.Run();
+
+
+// 將 Migration + 匯入封裝成獨立函式
+internal static class DbInitializer
+{
+    public static async Task ApplyMigrationsAndImportAsync(IServiceProvider services)
+    {
+        using var scope = services.CreateScope();
+        var sp = scope.ServiceProvider;
+        var logger = sp.GetRequiredService<ILogger<Program>>();
+
+        try
+        {
+            var context = sp.GetRequiredService<BaseballDbContext>();
+
+            // 套用 migrations
+            await context.Database.MigrateAsync();
+            Console.WriteLine("✓ 資料庫 Migration 完成");
+
+            // 只在目標資料庫為 PostgreSQL 且資料為空時，從 SQLite 匯入
+            if (context.Database.IsNpgsql() && !context.Batters.Any())
+            {
+                var sqlitePath = Path.Combine(AppContext.BaseDirectory, "data", "baseball.db");
+                if (File.Exists(sqlitePath))
+                {
+                    using var sqlite = new SqliteConnection($"Data Source={sqlitePath}");
+                    sqlite.Open();
+
+                    using var cmd = sqlite.CreateCommand();
+                    cmd.CommandText = "SELECT playerId, playerName FROM tblBatter";
+
+                    using var reader = cmd.ExecuteReader();
+                    while (reader.Read())
+                    {
+                        context.Batters.Add(new Batter
+                        {
+                            PlayerId = reader.GetString(0),
+                            PlayerName = reader.GetString(1)
+                        });
+                    }
+
+                    context.SaveChanges();
+                    Console.WriteLine("✓ Batters 資料自 SQLite 匯入完成");
+                }
+                else
+                {
+                    Console.WriteLine("找不到 baseball.db，未自動匯入 Batters 資料");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "資料庫 Migration 執行時發生錯誤");
+            throw;
+        }
+    }
+}
